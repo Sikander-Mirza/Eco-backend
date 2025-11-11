@@ -34,7 +34,6 @@ export const registerUser = asyncHandler(async (req, res) => {
 
   const newReferralCode = `${firstName.toLowerCase()}-${Math.random().toString(36).substring(2, 8)}`;
 
-  // ✅ Create user
   const user = await User.create({
     firstName,
     lastName,
@@ -44,20 +43,21 @@ export const registerUser = asyncHandler(async (req, res) => {
     phoneNumber,
     referralId: referrer?._id || null,
     referralCode: newReferralCode,
+    isVerified: false, // 🚨 user is unverified at registration
   });
 
-  // ✅ Generate OTP for email verification
+  // Generate OTP
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
   user.otpCode = otp;
   user.otpExpires = new Date(Date.now() + 5 * 60 * 1000);
   await user.save();
 
-  // ✅ Send OTP Email
-  await sendEmail(
+ await sendEmail(
   "sikander.mirza@themetroweb.com",
   "Your Login OTP",
   `Your one-time password (OTP) is <b>${otp}</b>.`
 );
+
 
   res.status(200).json({
     message: "OTP sent to your email. Please verify to complete registration.",
@@ -65,27 +65,63 @@ export const registerUser = asyncHandler(async (req, res) => {
   });
 });
 
+
 export const verifyOtp = asyncHandler(async (req, res) => {
   const { email, otp } = req.body;
 
-  if (!email || !otp) return res.status(400).json({ message: "Email and OTP are required" });
-
   const user = await User.findOne({ email });
 
-  if (!user || !user.otpCode) return res.status(400).json({ message: "Invalid or expired OTP" });
+  if (!user) return res.status(400).json({ message: "User not found" });
+  if (user.isVerified) return res.status(400).json({ message: "Email already verified" });
 
-  if (user.otpCode !== otp) return res.status(400).json({ message: "Incorrect OTP" });
+  if (!user.otpCode || user.otpCode !== otp)
+    return res.status(400).json({ message: "Invalid OTP" });
 
-  if (user.otpExpires < Date.now()) return res.status(400).json({ message: "OTP expired" });
+  if (user.otpExpires < Date.now())
+    return res.status(400).json({ message: "OTP expired" });
 
+  // ✅ Mark user verified
+  user.isVerified = true;
   user.otpCode = null;
   user.otpExpires = null;
   await user.save();
 
+  res.json({ message: "Email verification successful. You may now log in." });
+});
+
+
+
+// Login user
+export const loginUser = asyncHandler(async (req, res) => {
+  const { email, password } = req.body;
+
+  if (!email || !password)
+    return res.status(400).json({ message: "All fields are required" });
+
+  const user = await User.findOne({ email });
+
+  if (!user) return res.status(404).json({ message: "User not found" });
+
+  if (!user.isVerified)
+    return res.status(401).json({ message: "Please verify your email before login." });
+
+  const isPasswordValid = await bcrypt.compare(password, user.password);
+
+  if (!isPasswordValid)
+    return res.status(400).json({ message: "Invalid email or password" });
+
   const token = generateToken(user._id);
 
+  res.cookie("token", token, {
+    httpOnly: true,
+    secure: true,
+    sameSite: "none",
+    path: "/",
+    maxAge: 24 * 60 * 60 * 1000,
+  });
+
   res.status(200).json({
-    message: "Email verified successfully!",
+    message: "Login successful",
     user: {
       _id: user._id,
       firstName: user.firstName,
@@ -93,7 +129,6 @@ export const verifyOtp = asyncHandler(async (req, res) => {
       email: user.email,
       role: user.role,
       phoneNumber: user.phoneNumber,
-      mainBalance: user.mainBalance,
       referralCode: user.referralCode,
       referralId: user.referralId,
     },
@@ -101,51 +136,6 @@ export const verifyOtp = asyncHandler(async (req, res) => {
   });
 });
 
-
-// Login user
-export const loginUser = asyncHandler(async (req, res) => {
-  const { email, password } = req.body;
-
-  if (!email || !password) {
-    return res.status(400).json({ message: "All fields are required" });
-  }
-
-  const user = await User.findOne({ email });
-
-  if (!user) {
-    return res.status(404).json({ message: "User not found, please sign up" });
-  }
-
-  const isPasswordValid = await bcrypt.compare(password, user.password);
-
-  if (!isPasswordValid) {
-    return res.status(400).json({ message: "Invalid email or password" });
-  }
-
-  const token = generateToken(user._id);
-
-  const cookieOptions = {
-    httpOnly: true,
-    secure: true, // Must be true for cross-origin cookies
-    sameSite: 'none', // Required for cross-origin
-    path: '/',
-    maxAge: 24 * 60 * 60 * 1000 // 24 hours
-  };
-  res.cookie('token', token, cookieOptions);
-
-  
-  res.status(200).json({
-    _id: user._id,
-    firstName: user.firstName,
-    lastName: user.lastName,
-    email: user.email,
-    role: user.role, 
-    phoneNumber:user.phoneNumber,
-    mainBalance:user.mainBalance,
-    referralCode: user.referralCode,
-    referralId: user.referralId,
-  });
-});
 
 
 export const verifyPassword = asyncHandler(async (req, res) => {
