@@ -1,0 +1,28 @@
+# DO NOT REMOVE. CLOUDLINUX PASSENGER CONFIGURATION BEGIN
+PassengerAppRoot "/home/freelancerportfo/mining-backend.freelancerportfolio.me"
+PassengerBaseURI "/"
+PassengerNodejs "/home/freelancerportfo/nodevenv/mining-backend.freelancerportfolio.me/18/bin/node"
+PassengerAppType node
+PassengerStartupFile server.cjs
+# DO NOT REMOVE. CLOUDLINUX PASSENGER CONFIGURATION END
+# DO NOT REMOVE. CLOUDLINUX PASSENGER CONFIGURATION BEGIN
+PassengerAppRoot "/home/ecominex/backend.ecominex.net"
+PassengerBaseURI "/"
+PassengerNodejs "/home/ecominex/nodevenv/backend.ecominex.net/18/bin/node"
+PassengerAppType node
+PassengerStartupFile server.cjs
+# DO NOT REMOVE. CLOUDLINUX PASSENGER CONFIGURATION END
+# DO NOT REMOVE OR MODIFY. CLOUDLINUX ENV VARS CONFIGURATION BEGIN
+<IfModule Litespeed>
+SetEnv PORT 8000
+SetEnv OWNER_EMAIL miningforuae@gmail.com
+SetEnv MONGO_URI mongodb+srv://miningDb:miningDb@miningcluster.iocmf.mongodb.net/?retryWrites=true&w=majority&appName=MiningCluster
+SetEnv JWT_SECRET uryduidjcbnioefjhijb456
+SetEnv GMAIL_PASSWORD uxwi zvrr iteg vudd
+SetEnv GMAIL_EMAIL miningforuae@gmail.com
+SetEnv CLOUDNAME dt1tch0v9
+SetEnv CLIENT_URL https://ecominex.com
+SetEnv APISECRET GuDxlcOHytZBE7jgMxuWqM_Gowo
+SetEnv APIKEY 631169389786297
+</IfModule>
+# DO NOT REMOVE OR MODIFY. CLOUDLINUX ENV VARS CONFIGURATION END

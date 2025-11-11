@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <style>
+        :root {
+            --primary: #2563eb;
+            --secondary: #1e40af;
+            --text: #1f2937;
+            --muted: #6b7280;
+            --success: #22c55e;
+            --background: #f8fafc;
+        }
+
+        body {
+            font-family: 'Segoe UI', Arial, sans-serif;
+            line-height: 1.6;
+            background: #f3f4f6;
+            margin: 0;
+            padding: 20px;
+        }
+
+        .email-wrapper {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .header-banner {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: white;
+            padding: 2.5rem 2rem;
+            text-align: center;
+        }
+
+        .header-banner h1 {
+            margin: 0;
+            font-size: 26px;
+            font-weight: 600;
+        }
+
+        .header-banner p {
+            margin: 10px 0 0;
+            opacity: 0.9;
+        }
+
+        .content {
+            padding: 2.5rem;
+        }
+
+        .welcome-message {
+            margin-bottom: 2rem;
+        }
+
+        .machine-details {
+            background: var(--background);
+            border-radius: 12px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        .machine-details h2 {
+            color: var(--primary);
+            margin: 0 0 1.5rem;
+            font-size: 20px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .machine-details h2:before {
+            content: '';
+            display: inline-block;
+            width: 4px;
+            height: 20px;
+            background: var(--primary);
+            border-radius: 2px;
+        }
+
+        .detail-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 1.5rem;
+        }
+
+        .detail-item {
+            padding: 1.25rem;
+            background: white;
+            border-radius: 8px;
+            border: 1px solid #e5e7eb;
+            transition: transform 0.2s;
+        }
+
+        .detail-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        .detail-label {
+            color: var(--muted);
+            font-size: 14px;
+            margin-bottom: 6px;
+            font-weight: 500;
+        }
+
+        .detail-value {
+            color: var(--text);
+            font-weight: 600;
+            font-size: 16px;
+        }
+
+        .status-container {
+            text-align: center;
+            margin-top: 2rem;
+            padding: 1rem;
+            background: white;
+            border-radius: 8px;
+            border: 1px solid #e5e7eb;
+        }
+
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: var(--success);
+            color: white;
+            padding: 6px 16px;
+            border-radius: 999px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        .status-badge:before {
+            content: '';
+            width: 8px;
+            height: 8px;
+            background: white;
+            border-radius: 50%;
+        }
+
+        .cta-button {
+            display: block;
+            background: var(--primary);
+            color: white;
+            text-decoration: none;
+            padding: 1rem 2rem;
+            border-radius: 8px;
+            text-align: center;
+            font-weight: 500;
+            margin: 2rem 0;
+            transition: all 0.2s;
+        }
+
+        .cta-button:hover {
+            background: var(--secondary);
+            transform: translateY(-1px);
+        }
+
+        .footer {
+            background: var(--background);
+            padding: 1.5rem;
+            text-align: center;
+            color: var(--muted);
+            font-size: 14px;
+        }
+
+        .support-section {
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 1.5rem;
+            text-align: center;
+            margin: 2rem 0;
+        }
+
+        .divider {
+            height: 1px;
+            background: #e5e7eb;
+            margin: 2rem 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="email-wrapper">
+        <div class="header-banner">
+            <h1>Your New Mining Machine is Ready! 🎉</h1>
+            <p>Welcome to your enhanced mining journey</p>
+        </div>
+
+        <div class="content">
+            <div class="welcome-message">
+                <p>Hello <%= userName %>,</p>
+                <p>Excellent news! Your new mining machine has been successfully assigned to your account. Here are all the important details about your machine:</p>
+            </div>
+
+            <div class="machine-details">
+                <h2>Machine Specifications</h2>
+                <div class="detail-grid">
+                    <div class="detail-item">
+                        <div class="detail-label">Machine Name</div>
+                        <div class="detail-value"><%= machineName %></div>
+                    </div>
+                    
+                    <div class="detail-item">
+                        <div class="detail-label">Price Range</div>
+                        <div class="detail-value"><%= machinePrice %></div>
+                    </div>
+                      
+                    <div class="detail-item">
+                        <div class="detail-label">Monthly Profit</div>
+                        <div class="detail-value"><%= monthlyProfit %></div>
+                    </div>
+                
+                    <div class="detail-item">
+                        <div class="detail-label">Power Consumption</div>
+                        <div class="detail-value"><%= powerConsumption %> W/h</div>
+                    </div>
+                
+                    <div class="detail-item">
+                        <div class="detail-label">Quantity</div>
+                        <div class="detail-value"><%= quantity %> unit(s)</div>
+                    </div>
+    
+                          <div class="detail-item">
+                            <div class="detail-label">Assignment Date</div>
+                            <div class="detail-value"><%= assignedDate %></div>
+                        </div>
+    
+                </div>
+
+                <div class="status-container">
+                    <span class="status-badge">Active & Mining</span>
+                </div>
+            </div>
+
+            <a href="#" class="cta-button">View Your Mining Dashboard</a>
+
+            <div class="support-section">
+                <h3 style="color: var(--primary); margin-top: 0;">Need Assistance?</h3>
+                <p style="margin-bottom: 0;">Our support team is available 24/7 to help you with any questions or concerns.</p>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>This is an automated message from Mining System</p>
+            <p>© 2024 Mining Company. All rights reserved.</p>
+        </div>
+    </div>
+</body>
+</html>
