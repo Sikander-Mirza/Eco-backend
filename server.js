@@ -103,6 +103,9 @@ const server = async () => {
     console.error("Failed to start server:", error.message);
     process.exit(1);
   }
+  app.get("/", (req, res) => {
+  res.send("✅ Backend deployed on Vercel and running!");
+});
 };
 
 server();
