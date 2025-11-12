@@ -8,8 +8,7 @@ const upload = multer(); // memory storage for buffer
 
 // POST /api/deposit
 router.post("/deposit", upload.array("attachment"), createDeposit);
-console.log("route trigger")
-router.get("/deposit", protect, getDeposits);
+router.get("/deposit", protect,adminMiddleware, getDeposits);
 
 
 export default router;
