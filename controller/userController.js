@@ -85,7 +85,20 @@ export const verifyOtp = asyncHandler(async (req, res) => {
   user.otpCode = null;
   user.otpExpires = null;
   await user.save();
-
+res.status(200).json({
+    message: "Email verification successful.",
+    user: {
+      _id: user._id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      role: user.role,
+      phoneNumber: user.phoneNumber,
+      referralCode: user.referralCode,
+      referralId: user.referralId,
+    },
+    token,
+  });
   res.json({ message: "Email verification successful. You may now log in." });
 });
 
