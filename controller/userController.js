@@ -70,22 +70,24 @@ export const verifyOtp = asyncHandler(async (req, res) => {
   const { email, otp } = req.body;
 
   const user = await User.findOne({ email });
-
   if (!user) return res.status(400).json({ message: "User not found" });
   if (user.isVerified) return res.status(400).json({ message: "Email already verified" });
 
   if (!user.otpCode || user.otpCode !== otp)
     return res.status(400).json({ message: "Invalid OTP" });
 
-  if (user.otpExpires < Date.now())
+  if (new Date(user.otpExpires) < new Date())
     return res.status(400).json({ message: "OTP expired" });
 
   // ✅ Mark user verified
   user.isVerified = true;
   user.otpCode = null;
   user.otpExpires = null;
-  await user.save();
-res.status(200).json({
+
+  await user.save(); // save first
+  const token = generateToken(user._id);
+
+  res.status(200).json({
     message: "Email verification successful.",
     user: {
       _id: user._id,
@@ -94,13 +96,14 @@ res.status(200).json({
       email: user.email,
       role: user.role,
       phoneNumber: user.phoneNumber,
+      role: user.role,
       referralCode: user.referralCode,
       referralId: user.referralId,
     },
     token,
   });
-  res.json({ message: "Email verification successful. You may now log in." });
 });
+
 
 
 
