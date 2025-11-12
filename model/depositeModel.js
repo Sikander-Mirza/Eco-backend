@@ -15,6 +15,10 @@ const depositSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    accounttype:{
+      type:String,
+      required:true,
+    },
     attachment: {
       type: [String], // storing array of uploaded Cloudinary URLs
       required: false,

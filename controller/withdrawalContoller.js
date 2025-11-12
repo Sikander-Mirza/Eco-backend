@@ -48,6 +48,36 @@ export const createWithdrawalRequest = asyncHandler(async (req, res) => {
 
 
 
+export const getWithdrawals = asyncHandler(async (req, res) => {
+  const userId = req.user._id;
+  const user = await User.findById(userId);
+
+  if (!user) {
+    return res.status(404).json({ message: "User not found" });
+  }
+
+  let withdrawals;
+
+  if (user.role === "admin") {
+    // Admin can view all withdrawals
+    withdrawals = await Withdrawal.find()
+      .populate("userId", "firstName lastName email")
+      .sort({ createdAt: -1 });
+  } else {
+    // Regular user can only view their own withdrawals
+    withdrawals = await Withdrawal.find({ userId })
+      .sort({ createdAt: -1 });
+  }
+
+  res.status(200).json({
+    success: true,
+    count: withdrawals.length,
+    data: withdrawals,
+  });
+});
+
+
+
 // Request a new withdrawal
 export const requestWithdrawal = async (req, res) => {
   const session = await mongoose.startSession();

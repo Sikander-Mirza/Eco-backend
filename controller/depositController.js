@@ -1,9 +1,12 @@
 import Deposit from "../model/depositeModel.js";
 import uploadToCloudinary from "../helper/cloudinary.js";
+import User from "../model/UserModel.js";
+import asyncHandler from "express-async-handler";
+
 
 export const createDeposit = async (req, res) => {
   try {
-    const { userId, amount, transactionId, dateTime } = req.body;
+    const { userId, amount, transactionId, dateTime, accounttype } = req.body;
 
     let attachmentUrls = [];
 
@@ -19,6 +22,7 @@ export const createDeposit = async (req, res) => {
       userId,
       amount,
       transactionId,
+      accounttype,
       attachment: attachmentUrls,
       dateTime: dateTime || new Date(),
     });
@@ -39,3 +43,33 @@ export const createDeposit = async (req, res) => {
     });
   }
 };
+
+
+export const getDeposits = asyncHandler(async (req, res) => {
+  console.log("api hit")
+  const userId = req.user._id;
+  const user = await User.findById(userId);
+
+  if (!user) {
+    return res.status(404).json({ message: "User not found" });
+  }
+
+  let deposits;
+
+  if (user.role === "admin") {
+    // Admin sees all deposits
+    deposits = await Deposit.find()
+      .populate("userId", "firstName lastName email")
+      .sort({ createdAt: -1 });
+  } else {
+    // User sees their own deposits only
+    deposits = await Deposit.find({ userId })
+      .sort({ createdAt: -1 });
+  }
+
+  res.status(200).json({
+    success: true,
+    count: deposits.length,
+    data: deposits,
+  });
+});
