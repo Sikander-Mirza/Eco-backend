@@ -18,7 +18,8 @@ const allowedOrigins = [
   "https://ecomine-mining.vercel.app",
   "https://ecominex.net",
   "https://www.ecominex.net",
-  "https://ecominex.vercel.app"
+  "https://ecominex.vercel.app",
+  "https://ecominex-nett.vercel.app/"
 ].filter(Boolean);
 
 // CORS configuration

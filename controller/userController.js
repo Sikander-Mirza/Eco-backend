@@ -53,8 +53,8 @@ export const registerUser = asyncHandler(async (req, res) => {
   await user.save();
 
  await sendEmail(
-  "sikander.mirza@themetroweb.com",
-  "Your Login OTP",
+  user.email,
+  "Your Verification OTP",
   `Your one-time password (OTP) is <b>${otp}</b>.`
 );
 
@@ -99,14 +99,13 @@ export const loginUser = asyncHandler(async (req, res) => {
     return res.status(400).json({ message: "All fields are required" });
 
   const user = await User.findOne({ email });
-
   if (!user) return res.status(404).json({ message: "User not found" });
 
-  if (!user.isVerified)
+  // ✅ Skip verification check if user is admin
+  if (user.role !== "admin" && !user.isVerified)
     return res.status(401).json({ message: "Please verify your email before login." });
 
   const isPasswordValid = await bcrypt.compare(password, user.password);
-
   if (!isPasswordValid)
     return res.status(400).json({ message: "Invalid email or password" });
 
@@ -135,6 +134,7 @@ export const loginUser = asyncHandler(async (req, res) => {
     token,
   });
 });
+
 
 
 
