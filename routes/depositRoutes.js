@@ -7,7 +7,7 @@ const router = express.Router();
 const upload = multer(); // memory storage for buffer
 
 // POST /api/deposit
-router.post("/deposit", upload.array("attachment"), createDeposit);
+router.post("/deposit", protect,upload.array("attachment"), createDeposit);
 router.get("/deposit", protect,adminMiddleware, getDeposits);
 
 

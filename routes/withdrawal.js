@@ -9,14 +9,16 @@ import {
   getAllWithdrawals,
   getBalanceHistory,
   createWithdrawalRequest,
-  getWithdrawals
+  getWithdrawals,
+  updateWithdrawalStatus
 } from '../controller/withdrawalContoller.js';
 
 const router = express.Router();
 
 // Route prefix: /api/v1/withdrawals
 router.post("/withdrawals/create", protect, createWithdrawalRequest);
-router.get("/withdrawals/show", protect,adminMiddleware, getWithdrawals);
+router.get("/withdrawals/show", protect, getWithdrawals);
+router.patch("/withdrawal/:id", protect, adminMiddleware, updateWithdrawalStatus);
 router.post('/withdrawals/request', protect, requestWithdrawal);
 router.post('/withdrawals/process', protect, adminMiddleware, processWithdrawalRequest);
 router.get('/withdrawals/pending', protect, adminMiddleware, getPendingWithdrawals);

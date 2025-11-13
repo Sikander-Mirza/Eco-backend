@@ -22,7 +22,7 @@ export const createWithdrawalRequest = asyncHandler(async (req, res) => {
   if (!user) {
     return res.status(404).json({ message: "User not found" });
   }
-
+console.log(user.mainBalance,amount)
   if (user.mainBalance < amount) {
     return res.status(400).json({ message: "Insufficient balance" });
   }
@@ -75,6 +75,49 @@ export const getWithdrawals = asyncHandler(async (req, res) => {
     data: withdrawals,
   });
 });
+
+
+
+export const updateWithdrawalStatus = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body;
+
+  // Only allow valid statuses
+  if (!["Approved", "Rejected"].includes(status)) {
+    return res.status(400).json({ message: "Invalid status value" });
+  }
+
+  // Find withdrawal request
+  const withdrawal = await Withdrawal.findById(id);
+  if (!withdrawal) {
+    return res.status(404).json({ message: "Withdrawal request not found" });
+  }
+
+  // Find user associated with withdrawal
+  const user = await User.findById(withdrawal.userId);
+  if (!user) {
+    return res.status(404).json({ message: "User not found" });
+  }
+
+  // Update logic
+  if (status === "Rejected") {
+    // Refund user balance if rejected
+    user.mainBalance += withdrawal.amount;
+    await user.save();
+  }
+
+  // Update withdrawal status
+  withdrawal.status = status;
+  await withdrawal.save();
+
+  res.status(200).json({
+    success: true,
+    message: `Withdrawal request ${status.toLowerCase()} successfully`,
+    data: withdrawal,
+  });
+});
+
+
 
 
 
