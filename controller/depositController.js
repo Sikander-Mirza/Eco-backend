@@ -4,10 +4,10 @@ import User from "../model/UserModel.js";
 import asyncHandler from "express-async-handler";
 
 
-export const createDeposit = asyncHandler(async (req, res) => {
+export const createDeposit = async (req, res) => {
   try {
-    const { amount, transactionId, dateTime, accounttype } = req.body;
-const userId = req.user._id;
+    const { userId, amount, transactionId, dateTime, accounttype } = req.body;
+
     let attachmentUrls = [];
 
     // Upload attachments to Cloudinary if present
@@ -18,7 +18,6 @@ const userId = req.user._id;
       }
     }
 
-    // Create deposit record
     const newDeposit = new Deposit({
       userId,
       amount,
@@ -26,25 +25,14 @@ const userId = req.user._id;
       accounttype,
       attachment: attachmentUrls,
       dateTime: dateTime || new Date(),
-      status: "Pending", // default status
     });
 
     await newDeposit.save();
 
-    // ✅ Update user's main balance immediately
-    const user = await User.findById(userId);
-    if (!user) {
-      return res.status(404).json({ success: false, message: "User not found" });
-    }
-
-    user.mainBalance += Number(amount);
-    await user.save();
-
     return res.status(201).json({
       success: true,
-      message: "Deposit submitted successfully and balance updated",
+      message: "Deposit submitted successfully",
       data: newDeposit,
-      updatedBalance: user.mainBalance,
     });
   } catch (error) {
     console.error("❌ Deposit creation failed:", error);
@@ -54,7 +42,7 @@ const userId = req.user._id;
       error: error.message,
     });
   }
-});
+};
 
 
 export const getDeposits = asyncHandler(async (req, res) => {
