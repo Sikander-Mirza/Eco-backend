@@ -41,24 +41,33 @@ export const assignMachineToUser = async (req, res) => {
         machine: machineId,
         assignedDate: new Date(),
         status: 'active',
-        monthlyProfitAccumulated: 0
+        monthlyProfitAccumulated: 0,
+        machineName: machine.machineName,
+        hashrate: machine.hashrate,
+        powerConsumption: machine.powerConsumption,
+        priceRange: machine.priceRange,
+        coinsMined: machine.coinsMined,
+        monthlyProfit: machine.monthlyProfit,
+        description: machine.description,
+        images: machine.images
       });
+
       assignments.push(userMachine);
     }
 
     await UserMachine.insertMany(assignments, { session });
 
-    const emailData = {
-      userName: `${user.firstName} ${user.lastName}`,
-      machineName: machine.machineName.toString(),
-      quantity: quantity,
-      assignedDate: new Date().toLocaleDateString(),
-      machinePrice: machine.priceRange.toString(),
-      monthlyProfit: machine.monthlyProfit.toString(),
-      powerConsumption: machine.powerConsumption.toString()
-    };
-    
-    await sendEmail(user.email, 'New Mining Machines Assigned', 'machineAssignment', emailData);
+    // const emailData = {
+    //   userName: `${user.firstName} ${user.lastName}`,
+    //   machineName: machine.machineName.toString(),
+    //   quantity: quantity,
+    //   assignedDate: new Date().toLocaleDateString(),
+    //   machinePrice: machine.priceRange.toString(),
+    //   monthlyProfit: machine.monthlyProfit.toString(),
+    //   powerConsumption: machine.powerConsumption.toString()
+    // };
+
+    // await sendEmail(user.email, 'New Mining Machines Assigned', 'machineAssignment', emailData);
     await session.commitTransaction();
 
     const populatedAssignments = await UserMachine.find({
