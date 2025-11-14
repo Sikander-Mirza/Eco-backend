@@ -10,7 +10,7 @@ export const updateBalance = async (req, res) => {
   try {
     const { userId, amount, type } = req.body;
     
-    // Validate the amount
+    // Validate amount
     if (!amount || amount <= 0) {
       await session.abortTransaction();
       return res.status(400).json({ message: 'Invalid amount' });
@@ -37,19 +37,57 @@ export const updateBalance = async (req, res) => {
       transactionDate: new Date()
     });
 
-    // Update only adminAdd balance
+    // Update adminAdd
     balance.adminAdd += amount;
     balance.totalBalance = balance.adminAdd + balance.miningBalance;
     balance.lastUpdated = new Date();
 
-    // Save changes
+    // --- REFERRAL BONUS LOGIC START ---
+
+    // Find user to check referral
+    const currentUser = await User.findById(userId).session(session);
+
+    if (currentUser?.referralId) {
+      const referralUser = await User.findById(currentUser.referralId).session(session);
+
+      if (referralUser) {
+
+        // Count previous admin balance updates
+        const adminUpdatesCount = await Transaction.countDocuments({
+          user: userId,
+          type: type, // e.g., "admin_add"
+          status: 'approved'
+        }).session(session);
+
+        let bonusPercentage = 0;
+
+        if (adminUpdatesCount === 0) {
+          bonusPercentage = 0.10; // 10% on first time
+        } else if (adminUpdatesCount === 1) {
+          bonusPercentage = 0.20; // 20% on second time
+        }
+
+        if (bonusPercentage > 0) {
+          const bonusAmount = amount * bonusPercentage;
+
+          // Referral user gets bonus in mainBalance
+          referralUser.mainBalance += bonusAmount;
+
+          await referralUser.save({ session });
+        }
+      }
+    }
+
+    // --- REFERRAL BONUS LOGIC END ---
+
+    // Save admin transaction and balance
     await transaction.save({ session });
     await balance.save({ session });
     
     await session.commitTransaction();
 
     return res.status(200).json({
-      message: 'Admin balance added successfully',
+      message: 'Admin balance added successfully (Referral applied if eligible)',
       balances: {
         total: balance.totalBalance,
         admin: balance.adminAdd,
@@ -60,7 +98,6 @@ export const updateBalance = async (req, res) => {
 
   } catch (error) {
     await session.abortTransaction();
-    console.error('Balance update error:', error);
     return res.status(500).json({ 
       message: 'Error updating balance',
       error: error.message 
@@ -69,6 +106,7 @@ export const updateBalance = async (req, res) => {
     session.endSession();
   }
 };
+
 
 
 // Add this new controller for processing withdrawal requests

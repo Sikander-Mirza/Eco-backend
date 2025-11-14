@@ -1,5 +1,5 @@
 import express from "express";
-import { getCurrentUser, loginUser, logoutUser, profile, registerUser , updateProfile ,verifyOtp } from "../controller/userController.js";
+import { getCurrentUser, loginUser, logoutUser, profile, registerUser , updateProfile ,verifyOtp,getMyReferrals } from "../controller/userController.js";
 import { adminMiddleware, creatorMiddleware, protect } from "../middleware/authMiddleware.js";
 import { deleteUser, getAllUsers } from "../controller/adminContoller.js";
 
@@ -9,7 +9,8 @@ route.post("/register", registerUser);
 route.post("/login", loginUser);
 route.post("/logout", logoutUser); 
 route.get("/profile", protect, profile);
-route.post("/verify-otp",verifyOtp)
+route.post("/verify-otp",verifyOtp);
+route.get("/referrals/:userId",getMyReferrals)
 route.get("/me", protect, getCurrentUser); // Add this new route
 
 

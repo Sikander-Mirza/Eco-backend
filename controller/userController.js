@@ -267,3 +267,25 @@ export const updateProfile = asyncHandler(async (req, res) => {
     res.status(500).json({ message: "Server error", error: error.message });
   }
 });
+
+
+export const getMyReferrals = async (req, res) => {
+  try {
+    const userId = req.params.userId;
+
+    const referrals = await User.find({ referralId: userId })
+      .select("firstName lastName email createdAt");
+
+    return res.status(200).json({
+      success: true,
+      total: referrals.length,
+      users: referrals,
+    });
+
+  } catch (error) {
+    return res.status(500).json({
+      message: "Error fetching referrals",
+      error: error.message,
+    });
+  }
+};
