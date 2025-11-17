@@ -277,10 +277,10 @@ export const getMyReferrals = async (req, res) => {
       .select("firstName lastName email createdAt deposit_count discount");
 
     // Format discount to always show 2 decimals (0.40)
-    // referrals = referrals.map(ref => ({
-    //   ...ref.toObject(),
-    //   discount: ref.discount ? ref.discount.toFixed(2) : "0.00"
-    // }));
+    referrals = referrals.map(ref => ({
+      ...ref.toObject(),
+      discount: ref.discount ? ref.discount.toFixed(2) : "0.00"
+    }));
 
     return res.status(200).json({
       success: true,
