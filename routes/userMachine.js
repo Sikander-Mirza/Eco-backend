@@ -18,7 +18,8 @@ import {
   purchaseAndAssignMachine,
   sellUserMachine,
 } from "../controller/usermachine/transactionController.js";
-import { getBalance, updateBalance } from "../controller/balanceController.js";
+import { getAllBalance, getBalance, updateBalance } from "../controller/balanceController.js";
+
 
 const router = express.Router();
 /**
@@ -71,5 +72,8 @@ router.route("/balance/update").post(protect, adminMiddleware, updateBalance);
 router
   .route("/profit/percentages/:userId")
   .get(protect, getMachineProfitPercentages);
+
+
+router.get("/admin/balance", protect, adminMiddleware, getAllBalance);
 
 export default router;

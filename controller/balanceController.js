@@ -3,6 +3,7 @@ import Balance from '../model/Balance.js';
 import Transaction from '../model/withdrawals.js';
 import UserMAchine from '../model/UserMAchine.js';
 import User from "../model/UserModel.js";
+import asyncHandler from "express-async-handler";
 
 export const updateBalance = async (req, res) => {
   const session = await mongoose.startSession();
@@ -284,3 +285,22 @@ export const getBalance = async (req, res) => {
     });
   }
 };
+
+
+
+
+
+export const getAllBalance = asyncHandler(async (req, res) => {
+  try {
+    const users = await Balance.find({});
+
+    if (users.length === 0) {
+      return res.status(404).json({ message: "No Balance found" });
+    }
+
+    res.status(200).json(users);
+  } catch (error) {
+    console.error("Error fetching users:", error.message);
+    res.status(500).json({ message: `Server error: ${error.message}` });
+  }
+});
