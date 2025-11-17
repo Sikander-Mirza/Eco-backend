@@ -68,21 +68,26 @@ export const updateBalance = async (req, res) => {
         }
 
         // COUNT PAST ADMIN DEPOSITS
-        const adminUpdatesCount = await Transaction.countDocuments({
-          user: userId,
-          type: "ADMIN_ADD",
-          status: "approved",
-        }).session(session);
+   const adminUpdatesCount = await Transaction.countDocuments({
+  user: userId,
+  type: "ADMIN_ADD",
+  status: "approved",
+}).session(session);
 
-        // BONUS LOGIC
-        let bonusPercentage = adminUpdatesCount === 0 ? 0.10 : 0.20;
-        const bonusAmount = amount * bonusPercentage;
+// FIX: Remove the current transaction from count
+const previousDeposits = adminUpdatesCount; // This represents BEFORE current deposit
 
-        referralBalance.totalBalance += bonusAmount;
-        referralBalance.lastUpdated = new Date();
+let bonusPercentage = previousDeposits === 0 ? 0.10 : 0.20;
+const bonusAmount = amount * bonusPercentage;
 
-        await referralBalance.save({ session });
-        console.log(`Referral bonus ${bonusAmount} added.`);
+referralBalance.totalBalance += bonusAmount;
+referralBalance.lastUpdated = new Date();
+
+await referralBalance.save({ session });
+
+console.log(
+  `Referral bonus ${bonusAmount} added. (${bonusPercentage * 100}%) on amount ${amount}`
+);
       }
     }
 
