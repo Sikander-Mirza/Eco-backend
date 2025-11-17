@@ -62,18 +62,26 @@ const UserSchema = new mongoose.Schema(
       sparse: true, // allows null values while keeping uniqueness
       trim: true,
     },
+    deposit_count:{
+      type:Number,
+      default:null,
+    },
+    discount:{
+      type:Number,
+      default:null,
+    },
     otpCode: {
-  type: String,
-  default: null,
-},
-otpExpires: {
-  type: Date,
-  default: null,
-},
-isVerified: {
-  type: Boolean,
-  default: false,
-},
+      type: String,
+      default: null,
+    },
+    otpExpires: {
+      type: Date,
+      default: null,
+    },
+    isVerified: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,

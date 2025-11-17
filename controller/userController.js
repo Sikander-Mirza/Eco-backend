@@ -273,8 +273,14 @@ export const getMyReferrals = async (req, res) => {
   try {
     const userId = req.params.userId;
 
-    const referrals = await User.find({ referralId: userId })
-      .select("firstName lastName email createdAt");
+    let referrals = await User.find({ referralId: userId })
+      .select("firstName lastName email createdAt deposit_count discount");
+
+    // Format discount to always show 2 decimals (0.40)
+    referrals = referrals.map(ref => ({
+      ...ref.toObject(),
+      discount: ref.discount ? ref.discount.toFixed(2) : "0.00"
+    }));
 
     return res.status(200).json({
       success: true,
@@ -289,3 +295,4 @@ export const getMyReferrals = async (req, res) => {
     });
   }
 };
+

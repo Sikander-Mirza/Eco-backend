@@ -10,22 +10,16 @@ export const updateBalance = async (req, res) => {
 
   try {
     console.log(">>> updateBalance called");
-    console.log("req.body:", req.body);
+    const { userId, amount } = req.body;
 
-    const { userId, amount, type } = req.body;
-
-    // Validate amount
+    // VALIDATION
     if (!amount || amount <= 0) {
-      console.log("Invalid amount:", amount);
       await session.abortTransaction();
       return res.status(400).json({ message: "Invalid amount" });
     }
 
-    // Find or create balance record
-    console.log("Finding balance for user:", userId);
+    // FIND BALANCE RECORD
     let balance = await Balance.findOne({ user: userId }).session(session);
-    console.log("Existing balance record:", balance);
-
     if (!balance) {
       balance = new Balance({
         user: userId,
@@ -33,137 +27,114 @@ export const updateBalance = async (req, res) => {
         adminAdd: 0,
         miningBalance: 0,
       });
-      console.log("Created new balance object (not saved yet):", balance);
     }
 
-    // Create transaction record (ensure type is ADMIN_ADD for admin credit)
-    const transactionType = "ADMIN_ADD";
-    console.log("Using transactionType:", transactionType);
-
+    // CREATE TRANSACTION 
     const transaction = new Transaction({
       user: userId,
       amount: Math.abs(amount),
-      type: transactionType,
+      type: "ADMIN_ADD",
       status: "approved",
       details: `Admin balance add: $${amount}`,
       transactionDate: new Date(),
     });
 
-    console.log("Prepared transaction (not saved yet):", transaction);
-
-    // Update adminAdd
-    console.log("Before update - balance.adminAdd:", balance.adminAdd, "balance.miningBalance:", balance.miningBalance);
+    // UPDATE CURRENT USER BALANCE
     balance.adminAdd += amount;
     balance.totalBalance = balance.adminAdd + balance.miningBalance;
     balance.lastUpdated = new Date();
-    console.log("After update - balance.adminAdd:", balance.adminAdd, "totalBalance:", balance.totalBalance);
 
-   // --- REFERRAL BONUS LOGIC START ---
 
-console.log(">>> REFERRAL LOGIC START");
 
-try {
-    // 1. Fetch current user
-    const currentUser = await User.findById(req.body.userId).session(session);
-    if (!currentUser) {
-        console.log("❌ currentUser not found");
-        return;
-    }
+    // ⭐⭐⭐ REFERRAL LOGIC START ⭐⭐⭐
+    console.log(">>> REFERRAL LOGIC START");
 
-    console.log("currentUser:", {
-        id: currentUser._id,
-        referralId: currentUser.referralId
-    });
+    const currentUser = await User.findById(userId).session(session);
+    if (currentUser && currentUser.referralId) {
 
-    // 2. Check if referralId exists
-    if (!currentUser.referralId) {
-        console.log("User has no referralId assigned");
-        console.log(">>> REFERRAL LOGIC END");
-        return;
-    }
+      const referralUser = await User.findById(currentUser.referralId).session(session);
+      if (referralUser) {
 
-    // 3. Find referral user by ObjectId
-    const referralUser = await User.findById(currentUser.referralId).session(session);
-    if (!referralUser) {
-        console.log("❌ Referral user not found with referralId:", currentUser.referralId);
-        console.log(">>> REFERRAL LOGIC END");
-        return;
-    }
+        let referralBalance = await Balance.findOne({ user: referralUser._id }).session(session);
 
-    console.log("Referral user found:", referralUser._id);
-
-    // 4. Find or create referral user's balance
-    let referralBalance = await Balance.findOne({ user: referralUser._id }).session(session);
-    if (!referralBalance) {
-        console.log("Creating new referral balance for referrer");
-        referralBalance = new Balance({
+        if (!referralBalance) {
+          referralBalance = new Balance({
             user: referralUser._id,
             totalBalance: 0,
             adminAdd: 0,
             miningBalance: 0,
-        });
+          });
+        }
+
+        // COUNT PAST ADMIN DEPOSITS
+        const adminUpdatesCount = await Transaction.countDocuments({
+          user: userId,
+          type: "ADMIN_ADD",
+          status: "approved",
+        }).session(session);
+
+        // BONUS LOGIC
+        let bonusPercentage = adminUpdatesCount === 0 ? 0.10 : 0.20;
+        const bonusAmount = amount * bonusPercentage;
+
+        referralBalance.totalBalance += bonusAmount;
+        referralBalance.lastUpdated = new Date();
+
+        await referralBalance.save({ session });
+        console.log(`Referral bonus ${bonusAmount} added.`);
+      }
     }
 
-    // 5. Apply 20% bonus
-     let bonusPercentage = adminUpdatesCount === 0 ? 0.10 : 0.20;
-    const bonusAmount = req.body.amount * bonusPercentage;
-    referralBalance.totalBalance += bonusAmount;
-    referralBalance.lastUpdated = new Date();
+    console.log(">>> REFERRAL LOGIC END");
 
-    console.log(`Applying 20% bonus: ${bonusAmount} to referral user ${referralUser._id}`);
 
-    // 6. Save referral balance
-    await referralBalance.save({ session });
-    console.log("Referral balance updated successfully!");
 
-} catch (err) {
-    console.log("❌ ERROR IN REFERRAL LOGIC:", err);
+    // SAVE TRANSACTION + USER BALANCE
+    await transaction.save({ session });
+    await balance.save({ session });
+
+
+
+ // ⭐⭐⭐ UPDATE USER DEPOSIT_COUNT + DISCOUNT ⭐⭐⭐
+const userToUpdate = await User.findById(userId).session(session);
+
+// deposit_count increase
+userToUpdate.deposit_count = (userToUpdate.deposit_count || 0) + 1;
+
+// discount increment logic (CUMULATIVE)
+if (userToUpdate.deposit_count === 1) {
+    // First Deposit → +10%
+    userToUpdate.discount = (userToUpdate.discount || 0) + 0.10;
+} else {
+    // Second and onwards → +20%
+    userToUpdate.discount = (userToUpdate.discount || 0) + 0.20;
 }
 
-console.log(">>> REFERRAL LOGIC END");
+await userToUpdate.save({ session });
+
+console.log("Updated user's deposit count & discount:", {
+  deposit_count: userToUpdate.deposit_count,
+  discount: userToUpdate.discount
+});
 
 
 
-
-
-    // Save transaction and balance (both inside session)
-    console.log("Saving transaction...");
-    await transaction.save({ session });
-    console.log("Transaction saved:", transaction);
-
-    console.log("Saving balance...");
-    await balance.save({ session });
-    console.log("Balance saved:", balance);
 
     await session.commitTransaction();
-    console.log("Transaction committed successfully.");
+    session.endSession();
 
     return res.status(200).json({
-      message: "Admin balance added successfully (Referral applied if eligible)",
-      balances: {
-        total: balance.totalBalance,
-        admin: balance.adminAdd,
-        mining: balance.miningBalance,
-      },
-      transaction: transaction,
+      message: "Admin balance added successfully 🤝",
     });
+
   } catch (error) {
-    console.error("Error in updateBalance controller:", error);
-    try {
-      await session.abortTransaction();
-      console.log("Transaction aborted due to error.");
-    } catch (abortErr) {
-      console.error("Error aborting transaction:", abortErr);
-    }
-    return res.status(500).json({
-      message: "Error updating balance",
-      error: error.message,
-    });
-  } finally {
+    await session.abortTransaction();
     session.endSession();
-    console.log("Session ended.");
+    console.log(error);
+    return res.status(500).json({ message: "Error updating balance", error });
   }
 };
+
 
 
 
