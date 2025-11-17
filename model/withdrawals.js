@@ -16,7 +16,7 @@ const transactionSchema = new mongoose.Schema({
     },
     type: {
       type: String,
-      enum: ['withdrawal', 'profit', 'MACHINE_PURCHASE', 'MACHINE_SALE', 'SHARE_PURCHASE', 'SHARE_PROFIT', 'SHARE_SALE'],
+      enum: ['withdrawal', 'profit', 'MACHINE_PURCHASE', 'MACHINE_SALE', 'SHARE_PURCHASE', 'SHARE_PROFIT', 'SHARE_SALE', 'ADMIN_ADD' ],
       required: true
     },
     status: {
