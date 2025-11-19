@@ -340,7 +340,7 @@ export const forgotPassword = async (req, res) => {
     await user.save();
 
     // Reset link
-    const resetURL = `http://localhost:3000/reset-password/${resetToken}`;
+    const resetURL = `http://localhost:3000/auth/reset-password/${resetToken}`;
 
     await sendEmail(
       email,

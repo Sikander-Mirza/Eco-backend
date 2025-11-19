@@ -22,7 +22,7 @@ export const createWithdrawalRequest = asyncHandler(async (req, res) => {
   if (!user) {
     return res.status(404).json({ message: "User not found" });
   }
-console.log(user.mainBalance,amount)
+  console.log(user.mainBalance, amount)
   if (user.mainBalance < amount) {
     return res.status(400).json({ message: "Insufficient balance" });
   }
@@ -253,18 +253,29 @@ export const processWithdrawalRequest = async (req, res) => {
       // Deduct from balances - first from mining balance then from main if needed
       let remainingAmount = transaction.amount;
 
-      // First deduct from mining balance
-      // Modified withdrawal logic
-      const mainDeduction = Math.min(balance.adminAdd, remainingAmount);
-      balance.adminAdd -= mainDeduction;
-      remainingAmount -= mainDeduction;
+      // Deduct from mining first
+      const miningDeduction = Math.min(balance.miningBalance, remainingAmount);
+      balance.miningBalance -= miningDeduction;
+      remainingAmount -= miningDeduction;
 
+      // Deduct the rest from main balance
       if (remainingAmount > 0) {
-        balance.miningBalance -= remainingAmount;
+        const mainDeduction = Math.min(balance.adminAdd, remainingAmount);
+        balance.adminAdd -= mainDeduction;
+        remainingAmount -= mainDeduction;
+      }
+
+      // Final safety check (should never happen)
+      if (remainingAmount > 0) {
+        await session.abortTransaction();
+        return res.status(400).json({
+          message: "Insufficient balance after recalculation"
+        });
       }
 
       balance.totalBalance = balance.adminAdd + balance.miningBalance;
       await balance.save({ session });
+
     }
 
     // Update transaction

@@ -62,16 +62,16 @@ const UserSchema = new mongoose.Schema(
       sparse: true, // allows null values while keeping uniqueness
       trim: true,
     },
-    deposit_count:{
-      type:Number,
-      default:null,
+    deposit_count: {
+      type: Number,
+      default: null,
     },
-    discount:{
-      type:Number,
-      default:null,
+    discount: {
+      type: Number,
+      default: null,
     },
     resetPasswordToken: { type: String },
-  resetPasswordExpires: { type: Date },
+    resetPasswordExpires: { type: Date },
     otpCode: {
       type: String,
       default: null,
