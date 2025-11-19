@@ -70,6 +70,8 @@ const UserSchema = new mongoose.Schema(
       type:Number,
       default:null,
     },
+    resetPasswordToken: { type: String },
+  resetPasswordExpires: { type: Date },
     otpCode: {
       type: String,
       default: null,
