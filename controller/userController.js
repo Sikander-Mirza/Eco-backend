@@ -8,6 +8,7 @@ import ejs from 'ejs';
 import { fileURLToPath } from 'url';
 import path from 'path';
 import { sendEmail } from "../helper/emailServer.js";
+import crypto from "crypto";
 
 // Load environment variables
 dotenv.config();
@@ -120,8 +121,9 @@ export const loginUser = asyncHandler(async (req, res) => {
   // ✅ Skip verification check if user is admin
   if (user.role !== "admin" && !user.isVerified)
     return res.status(401).json({ message: "Please verify your email before login." });
-
+console.log(password)
   const isPasswordValid = await bcrypt.compare(password, user.password);
+  console.log(isPasswordValid)
   if (!isPasswordValid)
     return res.status(400).json({ message: "Invalid email or password" });
 
@@ -296,3 +298,64 @@ export const getMyReferrals = async (req, res) => {
   }
 };
 
+
+
+export const updatePassword = asyncHandler(async (req, res) => {
+  const { userId, currentPassword, newPassword } = req.body;
+
+  if (!userId || !currentPassword || !newPassword)
+    return res.status(400).json({ message: "All fields are required" });
+
+  const user = await User.findById(userId);
+  if (!user) return res.status(404).json({ message: "User not found" });
+console.log(currentPassword)
+  // Compare current password
+  const valid = await bcrypt.compare(currentPassword, user.password);
+  if (!valid)
+    return res.status(400).json({ message: "Current password is incorrect" });
+
+  // ❗ HASH THE NEW PASSWORD BEFORE SAVING
+  console.log(newPassword)
+  const hashedPassword = await bcrypt.hash(newPassword, 10);
+console.log(hashedPassword)
+  user.password = newPassword;
+  await user.save();
+
+  return res.status(200).json({ message: "Password updated successfully" });
+});
+
+export const forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) return res.status(400).json({ message: "Email is required" });
+
+    const user = await User.findOne({ email });
+    if (!user)
+      return res.status(404).json({ message: "No user found with this email" });
+
+    // Generate token
+    const resetToken = crypto.randomBytes(32).toString("hex");
+
+    // Token expire in 15 min
+    const expireTime = Date.now() + 15 * 60 * 1000;
+
+    user.resetPasswordToken = resetToken;
+    user.resetPasswordExpire = expireTime;
+    await user.save();
+
+    const resetURL = `${process.env.CLIENT_URL}/reset-password/${resetToken}`;
+
+    await sendEmail(
+      user.email,
+      "Reset Your Password",
+      resetURL
+    );
+
+    res.json({ message: "Password reset link sent to your email" });
+
+  } catch (error) {
+    console.log("❌ Forgot password error:", error);
+    res.status(500).json({ message: error.message });
+  }
+};
