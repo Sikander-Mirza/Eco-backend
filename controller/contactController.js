@@ -11,7 +11,7 @@ export const getAllContacts = async (req, res) => {
     if (status) {
       query.status = status;
     }
-
+    
     const contacts = await Contact.find(query)
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)

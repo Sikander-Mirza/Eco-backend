@@ -256,8 +256,8 @@ export const processWithdrawalRequest = async (req, res) => {
       // Deduct from mining first
       const miningDeduction = Math.min(balance.miningBalance, remainingAmount);
       balance.miningBalance -= miningDeduction;
-      remainingAmount -= miningDeduction;
-
+      remainingAmount -= mition;
+ningDeduc
       // Deduct the rest from main balance
       if (remainingAmount > 0) {
         const mainDeduction = Math.min(balance.adminAdd, remainingAmount);
