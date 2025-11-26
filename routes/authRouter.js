@@ -1,7 +1,7 @@
 import express from "express";
 import { getCurrentUser, loginUser, logoutUser, profile, registerUser , updateProfile ,verifyOtp,getMyReferrals,updatePassword,forgotPassword, resetPassword } from "../controller/userController.js";
 import { adminMiddleware, creatorMiddleware, protect } from "../middleware/authMiddleware.js";
-import { deleteUser, getAllUsers } from "../controller/adminContoller.js";
+import { deleteUser, getAllUsers, getAdminStats } from "../controller/adminContoller.js";
 
 const route=express.Router()
 
@@ -19,7 +19,7 @@ route.get("/me", protect, getCurrentUser); // Add this new route
 
 
 route.get("/admin/users", protect, adminMiddleware, getAllUsers);
-
+route.get("/stats", getAdminStats);
 route.delete("/admin/users/:id", protect, adminMiddleware, deleteUser);
 route.put("/profile/update", protect, updateProfile); // New route for updating profile
 

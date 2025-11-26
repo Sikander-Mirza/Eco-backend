@@ -1,5 +1,9 @@
 import asyncHandler from "express-async-handler";
 import User from "../model/UserModel.js";
+import MiningMachine from "../model/MiningMachine.js";
+import Transaction from "../model/withdrawals.js";
+import Deposit from "../model/depositeModel.js"
+import Contact from "../model/Contact.js";
 
 export const deleteUser = asyncHandler(async (req ,res) => {
   const { id } = req.params;
@@ -33,4 +37,26 @@ export const getAllUsers = asyncHandler(async (req, res) => {
 });
 
 
+export const getAdminStats = async (req, res) => {
+  try {
+    const totalUsers = await User.countDocuments();
+    const totalMachines = await MiningMachine.countDocuments();
+    const totalDeposits = await Deposit.countDocuments();
+    const totalWithdrawals = await Transaction.countDocuments();
+const contacts = await Contact.countDocuments();
+    return res.status(200).json({
+      success: true,
+      stats: {
+        totalUsers,
+        totalMachines,
+        totalDeposits,
+      totalWithdrawals,
+      contacts
+      }
+    });
 
+  } catch (error) {
+    console.error("Admin Stats Error:", error);
+    return res.status(500).json({ success: false, message: "Server Error" });
+  }
+};
