@@ -70,6 +70,11 @@ export const purchaseAndAssignMachine = async (req, res) => {
         Balance.findOne({ user: userId }).session(session),
       ]);
 
+if (user.referralStatus !== "active") {
+    user.referralStatus = "active";
+    await user.save({ session });
+  }
+
       if (!user || !machine || !balance) {
         throw new Error("User, machine, or balance record not found");
       }

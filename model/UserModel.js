@@ -66,6 +66,9 @@ const UserSchema = new mongoose.Schema(
       type: Number,
       default: null,
     },
+    referralStatus:{
+      type:String
+    },
     discount: {
       type: Number,
       default: null,

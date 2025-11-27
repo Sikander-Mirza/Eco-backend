@@ -276,7 +276,7 @@ export const getMyReferrals = async (req, res) => {
     const userId = req.params.userId;
 
     let referrals = await User.find({ referralId: userId })
-      .select("firstName lastName email createdAt deposit_count discount");
+      .select("firstName lastName email createdAt deposit_count discount referralStatus");
 
     // Format discount to always show 2 decimals (0.40)
     referrals = referrals.map(ref => ({
