@@ -127,31 +127,40 @@ export const requestWithdrawal = async (req, res) => {
   session.startTransaction();
 
   try {
-    const { email, amount } = req.body;
+    const { userId, email, amount, walletAddress, network } = req.body;
 
-    if (!email || !amount || amount <= 0) {
+    // Basic validation
+    if (!email || !amount || amount <= 0 || !walletAddress || !network) {
       await session.abortTransaction();
-      return res
-        .status(400)
-        .json({ message: "Valid email and amount are required" });
+      return res.status(400).json({
+        message: "Email, amount, wallet address, and network are required",
+      });
     }
 
-    // Find user and balance
-    const user = await User.findOne({ email: email.toLowerCase() }).session(
-      session
-    );
+    // Find user (Allow userId OR email)
+ let conditions = [{ email: email.toLowerCase() }];
+if (userId) {
+  conditions.push({ _id: userId });
+}
+
+const user = await User.findOne({
+  $or: conditions
+}).session(session);
+
     if (!user) {
       await session.abortTransaction();
       return res.status(404).json({ message: "User not found" });
     }
 
+    // Fetch user balance
     const balance = await Balance.findOne({ user: user._id }).session(session);
+
     if (!balance) {
       await session.abortTransaction();
       return res.status(404).json({ message: "Balance record not found" });
     }
 
-    // Check available balance
+    // Check balance
     if (amount > balance.totalBalance) {
       await session.abortTransaction();
       return res.status(400).json({
@@ -160,21 +169,23 @@ export const requestWithdrawal = async (req, res) => {
       });
     }
 
-    // Create pending transaction record
+    // Create pending withdrawal transaction
     const transaction = new Transaction({
       user: user._id,
-      amount: amount,
+      amount,
       type: "withdrawal",
       status: "pending",
+      walletAddress,         // ⭐ Added
+      network,               // ⭐ Added
       balanceBefore: balance.totalBalance,
       balanceAfter: balance.totalBalance - amount,
-      details: `Withdrawal request of $${amount}`,
+      details: `Withdrawal request of $${amount} via ${network}`,
     });
 
     await transaction.save({ session });
     await session.commitTransaction();
 
-    // Send email notification
+    // Send email
     try {
       await sendEmail(
         user.email,
@@ -182,18 +193,20 @@ export const requestWithdrawal = async (req, res) => {
         "withdrawalRequest",
         {
           userName: `${user.firstName} ${user.lastName}`,
-          amount: amount,
+          amount,
           requestDate: new Date().toLocaleString(),
           transactionId: transaction._id,
+          walletAddress,
+          network,
         }
       );
     } catch (emailError) {
-      console.error("Email notification failed:", emailError);
+      console.error("Email send failed:", emailError);
     }
 
     return res.status(200).json({
       message: "Withdrawal request submitted successfully",
-      transaction: transaction,
+      transaction,
       availableBalance: balance.totalBalance,
     });
   } catch (error) {
@@ -207,6 +220,7 @@ export const requestWithdrawal = async (req, res) => {
     session.endSession();
   }
 };
+
 
 ///
 export const processWithdrawalRequest = async (req, res) => {
@@ -253,17 +267,18 @@ export const processWithdrawalRequest = async (req, res) => {
       // Deduct from balances - first from mining balance then from main if needed
       let remainingAmount = transaction.amount;
 
-      // Deduct from mining first
-      const miningDeduction = Math.min(balance.miningBalance, remainingAmount);
-      balance.miningBalance -= miningDeduction;
-      remainingAmount -= mition;
-ningDeduc
-      // Deduct the rest from main balance
-      if (remainingAmount > 0) {
-        const mainDeduction = Math.min(balance.adminAdd, remainingAmount);
-        balance.adminAdd -= mainDeduction;
-        remainingAmount -= mainDeduction;
-      }
+// Deduct from mining balance first
+const miningDeduction = Math.min(balance.miningBalance, remainingAmount);
+balance.miningBalance -= miningDeduction;
+remainingAmount -= miningDeduction;
+
+// Deduct the rest from main/admin balance
+if (remainingAmount > 0) {
+  const mainDeduction = Math.min(balance.adminAdd, remainingAmount);
+  balance.adminAdd -= mainDeduction;
+  remainingAmount -= mainDeduction;
+}
+
 
       // Final safety check (should never happen)
       if (remainingAmount > 0) {

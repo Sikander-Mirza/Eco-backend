@@ -10,6 +10,9 @@ const transactionSchema = new mongoose.Schema({
       type: Number,
       required: true
     },
+    walletAddress: { type: String },
+network: { type: String },
+
     transactionDate: {
       type: Date,
       default: Date.now
