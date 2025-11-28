@@ -48,66 +48,66 @@ export const updateBalance = async (req, res) => {
 
 
     // --- REFERRAL BONUS LOGIC START ---
-console.log(">>> REFERRAL LOGIC START");
+// console.log(">>> REFERRAL LOGIC START");
 
-const currentUser = await User.findById(userId).session(session);
-if (!currentUser) {
-  console.log("❌ currentUser not found");
-} else if (!currentUser.referralId) {
-  console.log("⚠️ currentUser has no referralId assigned");
-} else {
-  console.log("currentUser:", { id: currentUser._id, referralId: currentUser.referralId });
+// const currentUser = await User.findById(userId).session(session);
+// if (!currentUser) {
+//   console.log("❌ currentUser not found");
+// } else if (!currentUser.referralId) {
+//   console.log("⚠️ currentUser has no referralId assigned");
+// } else {
+//   console.log("currentUser:", { id: currentUser._id, referralId: currentUser.referralId });
 
-  const referralUser = await User.findById(currentUser.referralId).session(session);
-  if (!referralUser) {
-    console.log("❌ referral user not found for id:", currentUser.referralId);
-  } else {
-    console.log("referralUser found:", referralUser._id);
+//   const referralUser = await User.findById(currentUser.referralId).session(session);
+//   if (!referralUser) {
+//     console.log("❌ referral user not found for id:", currentUser.referralId);
+//   } else {
+//     console.log("referralUser found:", referralUser._id);
 
-    // find or create referral balance
-    let referralBalance = await Balance.findOne({ user: referralUser._id }).session(session);
-    if (!referralBalance) {
-      console.log("Creating new referralBalance for referrer");
-      referralBalance = new Balance({
-        user: referralUser._id,
-        totalBalance: 0,
-        adminAdd: 0,
-        miningBalance: 0
-      });
-    } else {
-      console.log("Existing referralBalance:", referralBalance.totalBalance);
-    }
+//     // find or create referral balance
+//     let referralBalance = await Balance.findOne({ user: referralUser._id }).session(session);
+//     if (!referralBalance) {
+//       console.log("Creating new referralBalance for referrer");
+//       referralBalance = new Balance({
+//         user: referralUser._id,
+//         totalBalance: 0,
+//         adminAdd: 0,
+//         miningBalance: 0
+//       });
+//     } else {
+//       console.log("Existing referralBalance:", referralBalance.totalBalance);
+//     }
 
-    // Make sure amount is a number
-    const amt = Number(amount);
-    if (Number.isNaN(amt) || amt <= 0) {
-      console.log("Invalid amount for bonus calc:", amount);
-    } else {
-      // Count previous ADMIN_ADD transactions (before this one)
-      const adminUpdatesCount = await Transaction.countDocuments({
-        user: userId,
-        type: "ADMIN_ADD",
-        status: "approved"
-      }).session(session);
+//     // Make sure amount is a number
+//     const amt = Number(amount);
+//     if (Number.isNaN(amt) || amt <= 0) {
+//       console.log("Invalid amount for bonus calc:", amount);
+//     } else {
+//       // Count previous ADMIN_ADD transactions (before this one)
+//       const adminUpdatesCount = await Transaction.countDocuments({
+//         user: userId,
+//         type: "ADMIN_ADD",
+//         status: "approved"
+//       }).session(session);
 
-      console.log("adminUpdatesCount (previous approved ADMIN_ADD):", adminUpdatesCount);
+//       console.log("adminUpdatesCount (previous approved ADMIN_ADD):", adminUpdatesCount);
 
-      // Bonus percent: first time => 10% (0.10). Afterwards => 2% (0.02).
-      const bonusPercentage = adminUpdatesCount === 0 ? 0.10 : 0.02;
+//       // Bonus percent: first time => 10% (0.10). Afterwards => 2% (0.02).
+//       const bonusPercentage = adminUpdatesCount === 0 ? 0.10 : 0.02;
 
-      const bonusAmount = +(amt * bonusPercentage).toFixed(2); // round to 2 decimals
-      console.log(`Applying bonusPercentage: ${bonusPercentage} => bonusAmount: ${bonusAmount} on amount: ${amt}`);
+//       const bonusAmount = +(amt * bonusPercentage).toFixed(2); // round to 2 decimals
+//       console.log(`Applying bonusPercentage: ${bonusPercentage} => bonusAmount: ${bonusAmount} on amount: ${amt}`);
 
-      referralBalance.totalBalance = (referralBalance.totalBalance || 0) + bonusAmount;
-      referralBalance.lastUpdated = new Date();
+//       referralBalance.totalBalance = (referralBalance.totalBalance || 0) + bonusAmount;
+//       referralBalance.lastUpdated = new Date();
 
-      await referralBalance.save({ session });
-      console.log("Saved referralBalance. New totalBalance:", referralBalance.totalBalance);
-    }
-  }
-}
+//       await referralBalance.save({ session });
+//       console.log("Saved referralBalance. New totalBalance:", referralBalance.totalBalance);
+//     }
+//   }
+// }
 
-console.log(">>> REFERRAL LOGIC END");
+// console.log(">>> REFERRAL LOGIC END");
 // --- REFERRAL BONUS LOGIC END ---
 
 

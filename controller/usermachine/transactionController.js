@@ -63,6 +63,7 @@ export const purchaseAndAssignMachine = async (req, res) => {
     }
 
     const result = await executeTransactionWithRetry(async (session) => {
+
       // Find user, machine and balance
       const [user, machine, balance] = await Promise.all([
         User.findById(userId).session(session),
@@ -70,13 +71,14 @@ export const purchaseAndAssignMachine = async (req, res) => {
         Balance.findOne({ user: userId }).session(session),
       ]);
 
-if (user.referralStatus !== "active") {
-    user.referralStatus = "active";
-    await user.save({ session });
-  }
-
       if (!user || !machine || !balance) {
         throw new Error("User, machine, or balance record not found");
+      }
+
+      // First purchase → activate referral status
+      if (user.referralStatus !== "active") {
+        user.referralStatus = "active";
+        await user.save({ session });
       }
 
       const totalCost = machine.priceRange * quantity;
@@ -106,13 +108,58 @@ if (user.referralStatus !== "active") {
         { session }
       );
 
-      // Update balance
+      // Deduct cost from user balance
       balance.adminAdd -= totalCost;
       balance.totalBalance = balance.adminAdd + balance.miningBalance;
       balance.lastUpdated = new Date();
       await balance.save({ session });
 
-      // Create machine assignments
+
+
+      // ⭐⭐⭐ REFERRAL BONUS LOGIC MOVED HERE ⭐⭐⭐
+      console.log(">>> REFERRAL BONUS LOGIC START");
+
+      if (!user.referralId) {
+        console.log("User has no referralId — skipping bonus");
+      } else {
+        const referralUser = await User.findById(user.referralId).session(session);
+
+        if (referralUser) {
+          let referralBalance = await Balance.findOne({ user: referralUser._id }).session(session);
+
+          if (!referralBalance) {
+            referralBalance = new Balance({
+              user: referralUser._id,
+              totalBalance: 0,
+              adminAdd: 0,
+              miningBalance: 0,
+            });
+          }
+
+          // Count previous MACHINE_PURCHASE transactions
+          const purchaseCount = await Transaction.countDocuments({
+            user: userId,
+            type: "MACHINE_PURCHASE",
+            status: "completed",
+          }).session(session);
+
+          // First purchase => 10%, after that => 2%
+          const bonusPercentage = purchaseCount === 0 ? 0.10 : 0.02;
+
+          const bonusAmount = +(totalCost * bonusPercentage).toFixed(2);
+
+          referralBalance.totalBalance += bonusAmount;
+          referralBalance.lastUpdated = new Date();
+          await referralBalance.save({ session });
+
+          console.log(`🎁 Referral bonus applied: ${bonusAmount}`);
+        }
+      }
+      // ⭐⭐⭐ END REFERRAL BONUS LOGIC ⭐⭐⭐
+
+
+
+      // Assign machine(s)
       const assignments = Array(quantity)
         .fill()
         .map(() => ({
@@ -150,9 +197,8 @@ if (user.referralStatus !== "active") {
         path: "machine",
         select: "machineName model priceRange monthlyProfit",
       })
-      .lean(); // Use lean() for better performance since we don't need Mongoose documents
+      .lean();
 
-    // Format the response
     return res.status(201).json({
       message: "Machine(s) purchased and assigned successfully",
       machines: populatedMachines,
@@ -170,6 +216,7 @@ if (user.referralStatus !== "active") {
     });
   }
 };
+
 export const checkPurchaseEligibility = async (req, res) => {
   try {
     const { userId, machineId, quantity = 1 } = req.query;
