@@ -119,35 +119,35 @@ export const updateBalance = async (req, res) => {
 
 
 
-// ⭐⭐⭐ UPDATE USER DEPOSIT_COUNT + DISCOUNT ⭐⭐⭐
-const userToUpdate = await User.findById(userId).session(session);
+// // ⭐⭐⭐ UPDATE USER DEPOSIT_COUNT + DISCOUNT ⭐⭐⭐
+// const userToUpdate = await User.findById(userId).session(session);
 
-// deposit_count increase
-userToUpdate.deposit_count = (userToUpdate.deposit_count || 0) + 1;
+// // deposit_count increase
+// userToUpdate.deposit_count = (userToUpdate.deposit_count || 0) + 1;
 
-// -----------------------------
-// DISCOUNT AMOUNT LOGIC
-// -----------------------------
-let discountAmount = 0;
+// // -----------------------------
+// // DISCOUNT AMOUNT LOGIC
+// // -----------------------------
+// let discountAmount = 0;
 
-if (userToUpdate.deposit_count === 1) {
-    // ⭐ First deposit → 10% amount
-    discountAmount = amount * 0.10;
-} else {
-    // ⭐ Second, third, onwards → 2% amount
-    discountAmount = amount * 0.02;
-}
+// if (userToUpdate.deposit_count === 1) {
+//     // ⭐ First deposit → 10% amount
+//     discountAmount = amount * 0.10;
+// } else {
+//     // ⭐ Second, third, onwards → 2% amount
+//     discountAmount = amount * 0.02;
+// }
 
-// Add discount amount cumulatively
-userToUpdate.discount = (userToUpdate.discount || 0) + discountAmount;
+// // Add discount amount cumulatively
+// userToUpdate.discount = (userToUpdate.discount || 0) + discountAmount;
 
-await userToUpdate.save({ session });
+// await userToUpdate.save({ session });
 
-console.log("Updated user's deposit count & discount:", {
-  deposit_count: userToUpdate.deposit_count,
-  discount_added_this_time: discountAmount.toFixed(2),
-  total_discount: userToUpdate.discount.toFixed(2),
-});
+// console.log("Updated user's deposit count & discount:", {
+//   deposit_count: userToUpdate.deposit_count,
+//   discount_added_this_time: discountAmount.toFixed(2),
+//   total_discount: userToUpdate.discount.toFixed(2),
+// });
 
 
 

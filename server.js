@@ -21,7 +21,8 @@ const allowedOrigins = [
   "https://ecominex.vercel.app",
   "https://ecominexnett.vercel.app",
   "https://staging.ecominex.net",
-  "https://eco-frontend-swart.vercel.app"
+  "https://eco-frontend-swart.vercel.app",
+  "https://eco-frontend-i2v3.vercel.app"
 ].filter(Boolean);
 
 // CORS configuration
