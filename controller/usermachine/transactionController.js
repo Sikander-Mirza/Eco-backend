@@ -63,8 +63,7 @@ export const purchaseAndAssignMachine = async (req, res) => {
     }
 
     const result = await executeTransactionWithRetry(async (session) => {
-
-      // Find user, machine and balance
+      // Fetch user, machine, balance
       const [user, machine, balance] = await Promise.all([
         User.findById(userId).session(session),
         MiningMachine.findById(machineId).session(session),
@@ -75,7 +74,7 @@ export const purchaseAndAssignMachine = async (req, res) => {
         throw new Error("User, machine, or balance record not found");
       }
 
-      // First purchase → activate referral status
+      // Activate referral on first purchase
       if (user.referralStatus !== "active") {
         user.referralStatus = "active";
         await user.save({ session });
@@ -100,7 +99,7 @@ export const purchaseAndAssignMachine = async (req, res) => {
             metadata: {
               machineId: machine._id,
               machineName: machine.machineName,
-              quantity: quantity,
+              quantity,
               pricePerUnit: machine.priceRange,
             },
           },
@@ -108,74 +107,92 @@ export const purchaseAndAssignMachine = async (req, res) => {
         { session }
       );
 
-      // Deduct cost from user balance
+      // Deduct cost from balance
       balance.adminAdd -= totalCost;
       balance.totalBalance = balance.adminAdd + balance.miningBalance;
       balance.lastUpdated = new Date();
       await balance.save({ session });
 
+      /*
+      =========================================================
+        ⭐⭐⭐ USER DISCOUNT LOGIC ADDED HERE ⭐⭐⭐
+      =========================================================
+      */
+      console.log(">>> DISCOUNT LOGIC START");
 
+      // Count previous machine purchases
+      const purchaseCount = await Transaction.countDocuments({
+        user: userId,
+        type: "MACHINE_PURCHASE",
+        status: "completed",
+      }).session(session);
 
-      // ⭐⭐⭐ REFERRAL BONUS LOGIC MOVED HERE ⭐⭐⭐
-      console.log(">>> REFERRAL BONUS LOGIC START");
+      // First purchase → 10%, otherwise 2%
+      const discountPercentage = purchaseCount === 0 ? 0.10 : 0.02;
 
-      if (!user.referralId) {
-        console.log("User has no referralId — skipping bonus");
-      } else {
+      const discountAmount = +(totalCost * discountPercentage).toFixed(2);
+
+      user.discount = (user.discount || 0) + discountAmount;
+      await user.save({ session });
+
+      console.log("Updated user's discount:", {
+        previous_purchases: purchaseCount,
+        discount_percentage_used: discountPercentage,
+        discount_added_this_time: discountAmount,
+        total_discount: user.discount,
+      });
+
+      /*
+      =========================================================
+        ⭐⭐⭐ END DISCOUNT LOGIC ⭐⭐⭐
+      =========================================================
+      */
+
+      /*
+      =========================================================
+        ⭐⭐⭐ REFERRAL BONUS LOGIC ⭐⭐⭐
+      =========================================================
+      */
+      if (user.referralId) {
         const referralUser = await User.findById(user.referralId).session(session);
 
         if (referralUser) {
           let referralBalance = await Balance.findOne({ user: referralUser._id }).session(session);
-
           if (!referralBalance) {
             referralBalance = new Balance({
               user: referralUser._id,
-              totalBalance: 0,
               adminAdd: 0,
               miningBalance: 0,
+              totalBalance: 0,
             });
           }
 
-          // Count previous MACHINE_PURCHASE transactions
-          const purchaseCount = await Transaction.countDocuments({
-            user: userId,
-            type: "MACHINE_PURCHASE",
-            status: "completed",
-          }).session(session);
-
-          // First purchase => 10%, after that => 2%
           const bonusPercentage = purchaseCount === 0 ? 0.10 : 0.02;
-
           const bonusAmount = +(totalCost * bonusPercentage).toFixed(2);
 
           referralBalance.totalBalance += bonusAmount;
           referralBalance.lastUpdated = new Date();
           await referralBalance.save({ session });
 
-          console.log(`🎁 Referral bonus applied: ${bonusAmount}`);
+          console.log(`Referral bonus applied: ${bonusAmount}`);
         }
       }
-      // ⭐⭐⭐ END REFERRAL BONUS LOGIC ⭐⭐⭐
-
-
 
       // Assign machine(s)
-      const assignments = Array(quantity)
-        .fill()
-        .map(() => ({
-          user: userId,
-          machine: machineId,
-          assignedDate: new Date(),
-          status: "active",
-          monthlyProfitAccumulated: 0,
-          description: machine.description,
-          monthlyProfit: machine.monthlyProfit,
-          coinsMined: machine.coinsMined,
-          priceRange: machine.priceRange,
-          powerConsumption: machine.powerConsumption,
-          hashrate: machine.hashrate,
-          machineName: machine.machineName,
-        }));
+      const assignments = Array(quantity).fill().map(() => ({
+        user: userId,
+        machine: machineId,
+        assignedDate: new Date(),
+        status: "active",
+        monthlyProfitAccumulated: 0,
+        description: machine.description,
+        monthlyProfit: machine.monthlyProfit,
+        coinsMined: machine.coinsMined,
+        priceRange: machine.priceRange,
+        powerConsumption: machine.powerConsumption,
+        hashrate: machine.hashrate,
+        machineName: machine.machineName,
+      }));
 
       const userMachines = await UserMachine.create(assignments, { session });
 
@@ -189,18 +206,12 @@ export const purchaseAndAssignMachine = async (req, res) => {
     const populatedMachines = await UserMachine.find({
       _id: { $in: result.userMachines.map((m) => m._id) },
     })
-      .populate({
-        path: "user",
-        select: "firstName lastName email",
-      })
-      .populate({
-        path: "machine",
-        select: "machineName model priceRange monthlyProfit",
-      })
+      .populate({ path: "user", select: "firstName lastName email" })
+      .populate({ path: "machine", select: "machineName model priceRange monthlyProfit" })
       .lean();
 
     return res.status(201).json({
-      message: "Machine(s) purchased and assigned successfully",
+      message: "Machine(s) purchased successfully",
       machines: populatedMachines,
       transaction: {
         id: result.transaction._id,
@@ -208,6 +219,7 @@ export const purchaseAndAssignMachine = async (req, res) => {
         newBalance: result.balance.adminAdd,
       },
     });
+
   } catch (error) {
     console.error("Machine purchase error:", error);
     return res.status(400).json({
@@ -216,6 +228,9 @@ export const purchaseAndAssignMachine = async (req, res) => {
     });
   }
 };
+
+
+
 
 export const checkPurchaseEligibility = async (req, res) => {
   try {
