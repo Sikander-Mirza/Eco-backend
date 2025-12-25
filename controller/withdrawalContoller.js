@@ -302,23 +302,41 @@ if (remainingAmount > 0) {
 
     await session.commitTransaction();
 
-    // Send email notification
-    try {
-      await sendEmail(
-        transaction.user.email,
-        `Withdrawal Request ${action.toUpperCase()}`,
-        "withdrawalStatus",
-        {
-          userName: `${transaction.user.firstName} ${transaction.user.lastName}`,
-          amount: transaction.amount,
-          status: action,
-          transactionId: transaction._id,
-          adminComment: adminComment,
-        }
-      );
-    } catch (emailError) {
-      console.error("Email notification failed:", emailError);
-    }
+    
+   // Send email notification
+try {
+  const statusLabel = action === "approved" ? "approved" : "rejected";
+  const amount = transaction.amount;
+  const fullName = `${transaction.user.firstName || ""} ${
+    transaction.user.lastName || ""
+  }`.trim();
+
+  const html = `
+    <div style="font-family:sans-serif;line-height:1.5">
+      <h2>Withdrawal Request ${statusLabel.charAt(0).toUpperCase() + statusLabel.slice(1)}</h2>
+      <p>Hi ${fullName || "there"},</p>
+      <p>Your withdrawal request has been <b>${statusLabel}</b>.</p>
+      <p><b>Amount:</b> $${amount}</p>
+      <p><b>Transaction ID:</b> ${transaction._id}</p>
+      ${
+        adminComment
+          ? `<p><b>Note from admin:</b> ${adminComment}</p>`
+          : ""
+      }
+      <p style="margin-top:16px;color:#555">
+        If you did not request this withdrawal, please contact our support team immediately.
+      </p>
+    </div>
+  `;
+
+  await sendEmail(
+    transaction.user.email,
+    `Withdrawal Request ${statusLabel.toUpperCase()}`,
+    html
+  );
+} catch (emailError) {
+  console.error("Email notification failed:", emailError);
+}
 
     return res.status(200).json({
       message: `Withdrawal request ${action} successfully`,
@@ -377,7 +395,11 @@ export const getUserWithdrawals = async (req, res) => {
     const { email } = req.query;
     const { page = 1, limit = 10 } = req.query;
 
-    // First find the user by email
+    if (!email) {
+      return res.status(400).json({ message: "Email is required" });
+    }
+
+    // Find the user by email
     const user = await User.findOne({ email: email.toLowerCase() });
 
     if (!user) {
@@ -386,26 +408,34 @@ export const getUserWithdrawals = async (req, res) => {
       });
     }
 
-    // Then find their withdrawals using the user's _id
+    // Parse pagination values safely (JS, no type assertions)
+    const numericPage = Number(page) || 1;
+    const numericLimit = Number(limit) || 10;
+
+    // We want both withdrawals and admin credits
+    const types = ["withdrawal", "ADMIN_ADD"];
+
+    // Get paginated transactions
     const withdrawals = await Transaction.find({
       user: user._id,
-      type: "withdrawal",
+      type: { $in: types },
     })
       .sort({ transactionDate: -1 })
-      .skip((parseInt(page) - 1) * parseInt(limit))
-      .limit(parseInt(limit))
+      .skip((numericPage - 1) * numericLimit)
+      .limit(numericLimit)
       .populate("user", "email firstName lastName");
 
+    // Total count for pagination
     const total = await Transaction.countDocuments({
       user: user._id,
-      type: "withdrawal",
+      type: { $in: types },
     });
 
     res.status(200).json({
-      withdrawals,
-      totalPages: Math.ceil(total / parseInt(limit)),
-      currentPage: parseInt(page),
-      totalWithdrawals: total,
+      withdrawals, // includes both withdrawal & ADMIN_ADD
+      totalPages: Math.ceil(total / numericLimit),
+      currentPage: numericPage,
+      totalTransactions: total,
     });
   } catch (error) {
     console.error("Error retrieving user withdrawals:", error);

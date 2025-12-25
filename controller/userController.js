@@ -228,6 +228,7 @@ export const profile = asyncHandler(async (req, res) => {
   }
 
   res.status(200).json({
+    
     name: user.name,
     email: user.email,
     role: user.role,

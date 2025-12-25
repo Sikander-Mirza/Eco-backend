@@ -17,6 +17,7 @@ const allowedOrigins = [
   "http://127.0.0.1:5173",
   "https://ecomine-mining.vercel.app",
   "https://ecominex.net",
+  "https://eco-final-plum.vercel.app",
   "https://www.ecominex.net",
   "https://ecominex.vercel.app",
   "https://ecominexnett.vercel.app",

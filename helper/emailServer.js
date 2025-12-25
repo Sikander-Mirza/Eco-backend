@@ -17,17 +17,19 @@ export async function sendEmail(to, subject, message) {
   try {
     let htmlTemplate = "";
 
-    // If subject is OTP verification → use old template
+    // 1) OTP verification
     if (subject === "Your Verification OTP") {
+      // here `message` is the OTP code
       htmlTemplate = `
         <div style="font-family:sans-serif;line-height:1.5">
           <h2>${subject}</h2>
           <p>Your OTP is: <b>${message}</b></p>
         </div>`;
-    } 
-    
-    // Otherwise → Password Reset
-    else {
+    }
+
+    // 2) Password reset
+    else if (subject === "Password Reset Request") {
+      // here `message` is the reset link
       htmlTemplate = `
         <div style="font-family:sans-serif;line-height:1.5">
           <h2>Password Reset Request</h2>
@@ -43,6 +45,12 @@ export async function sendEmail(to, subject, message) {
         </div>`;
     }
 
+    // 3) Generic / custom HTML (e.g. withdrawal status)
+    else {
+      // here `message` is already a full HTML string
+      htmlTemplate = message;
+    }
+
     const mailOptions = {
       from: `"The Eco Mining" <${process.env.MAIL_EMAIL}>`,
       to,
@@ -53,7 +61,6 @@ export async function sendEmail(to, subject, message) {
     const info = await transporter.sendMail(mailOptions);
     console.log("✅ Email sent:", info.messageId);
     return true;
-
   } catch (error) {
     console.error("❌ Email send error:", error);
     throw new Error(error.message);
