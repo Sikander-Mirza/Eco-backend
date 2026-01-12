@@ -8,6 +8,9 @@ const UserSchema = new mongoose.Schema(
       required: [true, "First name is required"],
       trim: true,
     },
+    id:{
+      type:String,
+    },
     lastName: {
       type: String,
       required: [true, "Last name is required"],
@@ -87,6 +90,10 @@ const UserSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    twoFactorEnabled: {
+  type: Boolean,
+  default: false,
+},
   },
   {
     timestamps: true,

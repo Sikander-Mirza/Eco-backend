@@ -53,10 +53,10 @@ export const registerUser = asyncHandler(async (req, res) => {
   user.otpExpires = new Date(Date.now() + 5 * 60 * 1000);
   await user.save();
 
- await sendEmail(
+await sendEmail(
   user.email,
   "Your Verification OTP",
-  `Your one-time password (OTP) is <b>${otp}</b>.`
+  otp            // <-- just the code, no HTML
 );
 
 
@@ -91,6 +91,7 @@ export const verifyOtp = asyncHandler(async (req, res) => {
   res.status(200).json({
     message: "Email verification successful.",
     user: {
+      id:user._id,
       _id: user._id,
       firstName: user.firstName,
       lastName: user.lastName,
@@ -115,45 +116,116 @@ export const loginUser = asyncHandler(async (req, res) => {
   if (!email || !password)
     return res.status(400).json({ message: "All fields are required" });
 
-  const user = await User.findOne({ email });
+  const user = await User.findOne({ email: email.toLowerCase() });
   if (!user) return res.status(404).json({ message: "User not found" });
 
-  // ✅ Skip verification check if user is admin
+  // Skip verification check if user is admin
   if (user.role !== "admin" && !user.isVerified)
-    return res.status(401).json({ message: "Please verify your email before login." });
-console.log(password)
+    return res
+      .status(401)
+      .json({ message: "Please verify your email before login." });
+
   const isPasswordValid = await bcrypt.compare(password, user.password);
-  console.log(isPasswordValid)
   if (!isPasswordValid)
     return res.status(400).json({ message: "Invalid email or password" });
 
-  const token = generateToken(user._id);
+  // 1) If 2FA is NOT enabled → normal login (your existing behavior)
+  if (!user.twoFactorEnabled) {
+    const token = generateToken(user._id);
 
-  res.cookie("token", token, {
-    httpOnly: true,
-    secure: true,
-    sameSite: "none",
-    path: "/",
-    maxAge: 24 * 60 * 60 * 1000,
-  });
+    res.cookie("token", token, {
+      httpOnly: true,
+      secure: true,
+      sameSite: "none",
+      path: "/",
+      maxAge: 24 * 60 * 60 * 1000,
+    });
 
-  res.status(200).json({
-    message: "Login successful",
-    user: {
-      _id: user._id,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      email: user.email,
-      role: user.role,
-      phoneNumber: user.phoneNumber,
-      referralCode: user.referralCode,
-      referralId: user.referralId,
-    },
-    token,
+    return res.status(200).json({
+      success: true,
+      requires2FA: false,
+      message: "Login successful",
+      user: {
+        _id: user._id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        role: user.role,
+        phoneNumber: user.phoneNumber,
+        referralCode: user.referralCode,
+        referralId: user.referralId,
+        twoFactorEnabled: user.twoFactorEnabled,
+      },
+      token,
+    });
+  }
+
+  // 2) If 2FA is enabled → generate OTP, email it, NO token/cookie yet
+  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+  user.otpCode = otp;
+  user.otpExpires = new Date(Date.now() + 5 * 60 * 1000); // 5 mins
+  await user.save();
+
+  try {
+    await sendEmail(user.email, "Your Verification OTP", otp);
+  } catch (emailErr) {
+    console.error("2FA email send error:", emailErr);
+    return res
+      .status(500)
+      .json({ message: "Failed to send 2FA code. Please try again." });
+  }
+
+  // Do NOT set cookie or token here
+  return res.status(200).json({
+    success: true,
+    requires2FA: true,
+    message: "2FA code sent to your email.",
+    userId: user._id,
+    email: user.email,
   });
 });
 
+export const resendVerificationOtp = async (req, res) => {
+  try {
+    const { email } = req.body;
 
+    if (!email) {
+      return res.status(400).json({ message: "Email is required" });
+    }
+
+    const user = await User.findOne({ email: email.toLowerCase() });
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Optional: prevent resending if already verified
+    if (user.isVerified) {
+      return res.status(400).json({ message: "User is already verified" });
+    }
+
+    // Generate new OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    user.otpCode = otp;
+    user.otpExpires = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+    await user.save();
+
+    // Send email with OTP
+    // For subject "Your Verification OTP" your sendEmail expects the 3rd arg
+    // to be the OTP code (NOT full HTML).
+    await sendEmail(user.email, "Your Verification OTP", otp);
+
+    return res.status(200).json({
+      message: "A new verification code has been sent to your email.",
+    });
+  } catch (error) {
+    console.error("Resend OTP error:", error);
+    return res.status(500).json({
+      message: "Failed to resend verification code.",
+      error: error.message,
+    });
+  }
+};
 
 
 export const verifyPassword = asyncHandler(async (req, res) => {
@@ -341,12 +413,106 @@ export const forgotPassword = async (req, res) => {
     await user.save();
 
     // Reset link
-    const resetURL = `http://localhost:3000/reset-password/${resetToken}`;
+    const resetURL = `https://ecominex.net/auth/reset-password/${resetToken}`;
+
+ const emailData = {
+      userName: `${user.firstName || ""} ${user.lastName || ""}`.trim(),
+      resetURL,
+    };
+
+    const html = `
+      <div style="
+        margin:0;
+        padding:0;
+        background:#050810;
+        font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+        color:#e5e7eb;
+      ">
+        <div style="max-width:600px;margin:0 auto;padding:24px 16px;">
+          <!-- Logo / Brand -->
+          <div style="text-align:center;margin-bottom:20px;">
+            <span style="
+              display:inline-block;
+              padding:8px 14px;
+              border-radius:999px;
+              background:rgba(34,197,94,0.08);
+              border:1px solid rgba(34,197,94,0.35);
+              color:#4ade80;
+              font-size:12px;
+              letter-spacing:0.08em;
+              text-transform:uppercase;
+            ">
+              The Eco Mining
+            </span>
+          </div>
+
+          <!-- Card -->
+          <div style="
+            background:#050816;
+            border-radius:16px;
+            border:1px solid #1f2937;
+            box-shadow:0 24px 60px rgba(0,0,0,0.75);
+            padding:24px 20px 20px;
+          ">
+            <h2 style="
+              margin:0 0 12px 0;
+              font-size:20px;
+              font-weight:700;
+              color:#4ade80;
+            ">
+              Reset Your Password
+            </h2>
+
+            <p style="margin:0 0 10px 0;font-size:14px;color:#d1d5db;">
+              Hi ${emailData.userName || "there"},
+            </p>
+            <p style="margin:0 0 18px 0;font-size:14px;color:#9ca3af;line-height:1.6;">
+              We received a request to reset the password for your Eco Mining account.
+              Click the button below to choose a new password.
+            </p>
+
+            <!-- Button -->
+            <div style="margin:0 0 18px 0;text-align:center;">
+              <a href="${emailData.resetURL}"
+                style="
+                  display:inline-block;
+                  padding:10px 22px;
+                  border-radius:999px;
+                  background:#22c55e;
+                  color:#050810;
+                  font-size:14px;
+                  font-weight:600;
+                  text-decoration:none;
+                ">
+                Reset Password
+              </a>
+            </div>
+
+            <p style="margin:0 0 10px 0;font-size:12px;color:#9ca3af;line-height:1.6;">
+              Or copy and paste this link into your browser:
+            </p>
+            <p style="margin:0 0 18px 0;font-size:11px;color:#6b7280;word-break:break-all;">
+              ${emailData.resetURL}
+            </p>
+
+            <p style="margin:0 0 4px 0;font-size:12px;color:#6b7280;">
+              This link will expire in 10 minutes. If you did not request a password reset,
+              you can safely ignore this email.
+            </p>
+          </div>
+
+          <!-- Footer -->
+          <p style="margin:16px 0 0 0;font-size:11px;color:#6b7280;text-align:center;">
+            © ${new Date().getFullYear()} The Eco Mining. All rights reserved.
+          </p>
+        </div>
+      </div>
+    `;
 
     await sendEmail(
       email,
-      "Password Reset",
-      resetURL
+      "Password Reset", // not "Password Reset Request", so it uses generic HTML branch
+      html
     );
 
     res.json({ message: "Reset link sent to email", resetToken }); // resetURL only for testing
@@ -359,7 +525,14 @@ export const forgotPassword = async (req, res) => {
 
 export const resetPassword = async (req, res) => {
   try {
-    const { token, Password } = req.body;
+    // token comes from URL: /reset-password/:token
+    const { token } = req.params;
+    // password comes from body: { password: "..." }
+    const { password } = req.body;
+
+    if (!password) {
+      return res.status(400).json({ message: "Password is required" });
+    }
 
     const user = await User.findOne({
       resetPasswordToken: token,
@@ -370,8 +543,8 @@ export const resetPassword = async (req, res) => {
       return res.status(400).json({ message: "Invalid or expired token" });
     }
 
-    // Set new password
-    user.password = Password;
+    // Set new password (assuming your User model hashes on save)
+    user.password = password;
 
     // Clear reset token
     user.resetPasswordToken = undefined;
@@ -379,9 +552,126 @@ export const resetPassword = async (req, res) => {
 
     await user.save();
 
-    res.json({ message: "Password reset successful" });
+    return res.json({ message: "Password reset successful" });
   } catch (error) {
     console.log("❌ Reset password error:", error);
-    res.status(500).json({ message: "Server error" });
+    return res.status(500).json({ message: "Server error" });
   }
 };
+
+// controllers/authController.js
+export const toggleTwoFactor = asyncHandler(async (req, res) => {
+  const { userId, enabled } = req.body;
+
+  if (!userId) {
+    return res.status(400).json({ success: false, message: "User ID required" });
+  }
+
+  const user = await User.findByIdAndUpdate(
+    userId,
+    { twoFactorEnabled: !!enabled },
+    { new: true }
+  ).select("-password");
+
+  if (!user) {
+    return res.status(404).json({ success: false, message: "User not found" });
+  }
+
+  return res.json({
+    success: true,
+    message: `Two-factor authentication ${enabled ? "enabled" : "disabled"}.`,
+  });
+});
+
+export const verifyLoginOtp = asyncHandler(async (req, res) => {
+  const { userId, otp } = req.body;
+
+  if (!userId || !otp)
+    return res.status(400).json({ message: "User ID and OTP are required" });
+
+  const user = await User.findById(userId);
+  if (!user || !user.twoFactorEnabled)
+    return res.status(400).json({ message: "Invalid request" });
+
+  if (!user.otpCode || !user.otpExpires)
+    return res
+      .status(400)
+      .json({ message: "No active OTP. Please login again." });
+
+  if (user.otpCode !== otp)
+    return res.status(400).json({ message: "Invalid OTP" });
+
+  if (user.otpExpires < new Date())
+    return res
+      .status(400)
+      .json({ message: "OTP has expired. Please login again." });
+
+  user.otpCode = undefined;
+  user.otpExpires = undefined;
+  await user.save();
+
+  const token = generateToken(user._id);
+
+  res.cookie("token", token, {
+    httpOnly: true,
+    secure: true,
+    sameSite: "none",
+    path: "/",
+    maxAge: 24 * 60 * 60 * 1000,
+  });
+
+  return res.status(200).json({
+    success: true,
+    message: "2FA verification successful",
+    user: {
+      _id: user._id,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      email: user.email,
+      role: user.role,
+      phoneNumber: user.phoneNumber,
+      referralCode: user.referralCode,
+      referralId: user.referralId,
+      twoFactorEnabled: !!user.twoFactorEnabled, // <-- include here too
+    },
+    token,
+  });
+});
+
+
+export const resendLoginOtp = asyncHandler(async (req, res) => {
+  const { email } = req.body;
+
+  if (!email) {
+    return res.status(400).json({ message: "Email is required" });
+  }
+
+  const user = await User.findOne({ email: email.toLowerCase() });
+
+  if (!user) {
+    return res.status(404).json({ message: "User not found" });
+  }
+
+  if (!user.twoFactorEnabled) {
+    return res
+      .status(400)
+      .json({ message: "Two-factor authentication is not enabled." });
+  }
+
+  // Generate new OTP
+  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+  user.otpCode = otp;
+  user.otpExpires = new Date(Date.now() + 5 * 60 * 1000); // 5 minutes
+  await user.save();
+
+  try {
+    await sendEmail(user.email, "Your Verification OTP", otp);
+  } catch (err) {
+    console.error("Resend login OTP email error:", err);
+    return res
+      .status(500)
+      .json({ message: "Failed to send OTP. Please try again." });
+  }
+
+  return res.json({ message: "Login 2FA code resent to your email." });
+});

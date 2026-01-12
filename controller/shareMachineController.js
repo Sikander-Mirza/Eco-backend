@@ -63,7 +63,6 @@ export const purchaseSpecialShares = async (req, res) => {
       });
     }
 
-    // Find user
     const user = await User.findById(userId).session(session);
     if (!user) {
       await session.abortTransaction();
@@ -73,21 +72,15 @@ export const purchaseSpecialShares = async (req, res) => {
       });
     }
 
-    console.log("Session:", session);
     const machine = await MiningMachine.findOneAndUpdate(
       {
         isShareBased: true,
         priceRange: 19000,
         sharePrice: 50
       },
-      { $set: { lastChecked: new Date() } }, // Dummy update to acquire lock
-      { 
-        session,
-        new: true,
-        runValidators: true
-      }
+      { $set: { lastChecked: new Date() } },
+      { session, new: true, runValidators: true }
     );
-    console.log("Machine:", machine);
 
     if (!machine) {
       await session.abortTransaction();
@@ -97,14 +90,13 @@ export const purchaseSpecialShares = async (req, res) => {
       });
     }
 
-    // Check share availability with proper locking
     const soldShares = await SharePurchase.countDocuments({
       machine: machine._id,
-      status: 'active'
+      status: "active"
     }).session(session);
-    
+
     const availableShares = machine.totalShares - soldShares;
-    
+
     if (numberOfShares > availableShares) {
       await session.abortTransaction();
       return res.status(StatusCodes.BAD_REQUEST).json({
@@ -113,17 +105,15 @@ export const purchaseSpecialShares = async (req, res) => {
       });
     }
 
-    // Calculate costs
     const sharePrice = machine.sharePrice;
     const totalCost = sharePrice * numberOfShares;
     const monthlyProfitPerShare = machine.profitPerShare;
     const expectedMonthlyProfit = monthlyProfitPerShare * numberOfShares;
 
-    // Check if user has enough balance
     let balance = await Balance.findOneAndUpdate(
       { user: userId },
-      { $set: { lastChecked: new Date() } }, // Dummy update to acquire lock
-      { 
+      { $set: { lastChecked: new Date() } },
+      {
         session,
         new: true,
         upsert: true,
@@ -132,7 +122,6 @@ export const purchaseSpecialShares = async (req, res) => {
     );
 
     if (!balance) {
-      // Create balance if not exists (though upsert should handle this)
       balance = new Balance({
         user: userId,
         totalBalance: 0,
@@ -152,38 +141,45 @@ export const purchaseSpecialShares = async (req, res) => {
       });
     }
 
-    // Create share purchase
-    const sharePurchase = await SharePurchase.create([{
-      user: userId,
-      machine: machine._id,
-      numberOfShares: numberOfShares,
-      pricePerShare: sharePrice,
-      profitPerShare: monthlyProfitPerShare,
-      totalInvestment: totalCost,
-      purchaseDate: new Date(),
-      lastProfitUpdate: new Date(),
-      status: 'active'
-    }], { session });
+    const sharePurchase = await SharePurchase.create(
+      [
+        {
+          user: userId,
+          machine: machine._id,
+          numberOfShares,
+          pricePerShare: sharePrice,
+          profitPerShare: monthlyProfitPerShare,
+          totalInvestment: totalCost,
+          purchaseDate: new Date(),
+          lastProfitUpdate: new Date(),
+          status: "active"
+        }
+      ],
+      { session }
+    );
 
-    // Create transaction record
-    const transaction = await Transaction.create([{
-      user: userId,
-      amount: totalCost,
-      type: 'SHARE_PURCHASE',
-      status: 'completed',
-      balanceBefore: balance.totalBalance,
-      balanceAfter: balance.totalBalance - totalCost,
-      details: `Purchased ${numberOfShares} shares of ${machine.machineName}`,
-      transactionDate: new Date(),
-      metadata: {
-        machineId: machine._id,
-        machineName: machine.machineName,
-        shares: numberOfShares,
-        pricePerShare: sharePrice
-      }
-    }], { session });
+    const transaction = await Transaction.create(
+      [
+        {
+          user: userId,
+          amount: totalCost,
+          type: "SHARE_PURCHASE",
+          status: "completed",
+          balanceBefore: balance.totalBalance,
+          balanceAfter: balance.totalBalance - totalCost,
+          details: `Purchased ${numberOfShares} shares of ${machine.machineName}`,
+          transactionDate: new Date(),
+          metadata: {
+            machineId: machine._id,
+            machineName: machine.machineName,
+            shares: numberOfShares,
+            pricePerShare: sharePrice
+          }
+        }
+      ],
+      { session }
+    );
 
-    // Update user balance
     balance.adminAdd -= totalCost;
     balance.totalBalance = balance.adminAdd + balance.miningBalance;
     balance.lastUpdated = new Date();
@@ -191,25 +187,134 @@ export const purchaseSpecialShares = async (req, res) => {
 
     // Send email confirmation
     try {
+      console.log("[SharePurchase] Preparing email for:", user.email);
+
       const emailData = {
-        userName: `${user.firstName} ${user.lastName}`,
+        userName: `${user.firstName || ""} ${user.lastName || ""}`.trim(),
         machineName: machine.machineName,
-        numberOfShares: numberOfShares,
-        sharePrice: sharePrice,
-        totalInvestment: totalCost,
-        monthlyProfit: expectedMonthlyProfit,
-        purchaseDate: new Date().toLocaleDateString()
+        numberOfShares,
+        pricePerShare: machine.sharePrice,
+        totalCost: numberOfShares * machine.sharePrice
       };
-      
+
+     const html = `
+  <div style="
+    margin:0;
+    padding:0;
+    background:#050810;
+    font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    color:#e5e7eb;
+  ">
+    <div style="max-width:600px;margin:0 auto;padding:24px 16px;">
+      <!-- Logo / Brand -->
+      <div style="text-align:center;margin-bottom:20px;">
+        <span style="
+          display:inline-block;
+          padding:8px 14px;
+          border-radius:999px;
+          background:rgba(34,197,94,0.08);
+          border:1px solid rgba(34,197,94,0.35);
+          color:#4ade80;
+          font-size:12px;
+          letter-spacing:0.08em;
+          text-transform:uppercase;
+        ">
+          The Eco Mining
+        </span>
+      </div>
+
+      <!-- Card -->
+      <div style="
+        background:#050816;
+        border-radius:16px;
+        border:1px solid #1f2937;
+        box-shadow:0 24px 60px rgba(0,0,0,0.75);
+        padding:24px 20px 20px;
+      ">
+        <h2 style="
+          margin:0 0 12px 0;
+          font-size:20px;
+          font-weight:700;
+          color:#4ade80;
+        ">
+          Share Purchase Confirmation
+        </h2>
+
+        <p style="margin:0 0 10px 0;font-size:14px;color:#d1d5db;">
+          Hi ${emailData.userName || "there"},
+        </p>
+        <p style="margin:0 0 18px 0;font-size:14px;color:#9ca3af;line-height:1.6;">
+          Thank you for purchasing shares in
+          <span style="color:#f9fafb;font-weight:600;">
+            ${emailData.machineName}
+          </span>.
+          Your investment has been added to your shared machines portfolio.
+        </p>
+
+        <!-- Details box -->
+        <div style="
+          margin:0 0 18px 0;
+          padding:14px 14px 12px;
+          border-radius:12px;
+          background:linear-gradient(135deg,#020617,#020617 40%,#064e3b33);
+          border:1px solid #111827;
+        ">
+          <p style="margin:0 0 6px 0;font-size:13px;color:#9ca3af;">
+            <span style="color:#e5e7eb;font-weight:600;">Shares Purchased:</span>
+            <span style="float:right;color:#f9fafb;font-weight:600;">
+              ${emailData.numberOfShares}
+            </span>
+          </p>
+          <p style="margin:0 0 6px 0;font-size:13px;color:#9ca3af;clear:both;">
+            <span style="color:#e5e7eb;font-weight:600;">Price per Share:</span>
+            <span style="float:right;color:#f9fafb;">
+              $${emailData.pricePerShare}
+            </span>
+          </p>
+          <p style="margin:0;font-size:13px;color:#9ca3af;clear:both;">
+            <span style="color:#e5e7eb;font-weight:600;">Total Cost:</span>
+            <span style="
+              float:right;
+              color:#4ade80;
+              font-weight:700;
+            ">
+              $${emailData.totalCost}
+            </span>
+          </p>
+        </div>
+
+        <p style="margin:0 0 12px 0;font-size:13px;color:#9ca3af;line-height:1.6;">
+          You can view this shared machine and track your earnings directly
+          from your dashboard under
+          <span style="color:#e5e7eb;font-weight:500;">Shared Machines</span>.
+        </p>
+
+        <p style="margin:0 0 4px 0;font-size:12px;color:#6b7280;">
+          If you did not perform this transaction, please contact support
+          immediately.
+        </p>
+      </div>
+
+      <!-- Footer -->
+      <p style="margin:16px 0 0 0;font-size:11px;color:#6b7280;text-align:center;">
+        © ${new Date().getFullYear()} The Eco Mining. All rights reserved.
+      </p>
+    </div>
+  </div>
+`;
+
+      console.log("[SharePurchase] Email HTML preview:", html.slice(0, 200));
+
       await sendEmail(
         user.email,
-        'Share Purchase Confirmation',
-        'sharePurchaseConfirmation',
-        emailData
+        "Share Purchase Confirmation",
+        html
       );
+
+      console.log("[SharePurchase] Email sent successfully to:", user.email);
     } catch (emailError) {
-      console.error("Email sending failed:", emailError);
-      // Continue with transaction even if email fails
+      console.error("[SharePurchase] Email sending failed:", emailError);
+      // Continue even if email fails
     }
 
     await session.commitTransaction();
@@ -221,10 +326,9 @@ export const purchaseSpecialShares = async (req, res) => {
         purchase: sharePurchase[0],
         transaction: transaction[0],
         newBalance: balance.totalBalance,
-        expectedMonthlyProfit: expectedMonthlyProfit
+        expectedMonthlyProfit
       }
     });
-
   } catch (error) {
     await session.abortTransaction();
     console.error("Share purchase error:", error);
@@ -237,6 +341,7 @@ export const purchaseSpecialShares = async (req, res) => {
     session.endSession();
   }
 };
+
 // Update profits for all share purchases (run this daily)
 export const updateAllShareProfits = async (req, res) => {
   const session = await mongoose.startSession();
@@ -521,23 +626,34 @@ export const sellSharePurchase = async (req, res) => {
     // Send email confirmation
     try {
       const emailData = {
-        userName: `${sharePurchase.user.firstName} ${sharePurchase.user.lastName}`,
-        machineName: sharePurchase.machine.machineName,
-        soldShares: numberOfSharesToSell,
-        originalValue: originalValue,
-        deduction: deduction,
-        sellingPrice: sellingPrice,
-        newBalance: balance.totalBalance,
-        remainingShares: sharePurchase.numberOfShares,
-        date: new Date().toLocaleDateString()
-      };
-      
-      await sendEmail(
-        sharePurchase.user.email,
-        'Share Sale Confirmation',
-        'shareSaleConfirmation',
-        emailData
-      );
+  userName: `${user.firstName} ${user.lastName}`,
+  machineName: specialMachine.machineName,
+  numberOfShares,
+  pricePerShare: specialMachine.sharePrice,
+  totalCost: numberOfShares * specialMachine.sharePrice,
+};
+
+const html = `
+  <div style="font-family:sans-serif;line-height:1.5">
+    <h2>Share Purchase Confirmation</h2>
+    <p>Hi ${emailData.userName || "there"},</p>
+    <p>Thank you for purchasing shares in <b>${emailData.machineName}</b>.</p>
+
+    <p><b>Shares Purchased:</b> ${emailData.numberOfShares}</p>
+    <p><b>Price per Share:</b> $${emailData.pricePerShare}</p>
+    <p><b>Total Cost:</b> $${emailData.totalCost}</p>
+
+    <p style="margin-top:16px;color:#555">
+      You can view your shared machines in your dashboard.
+    </p>
+  </div>
+`;
+
+await sendEmail(
+  user.email,
+  "Share Purchase Confirmation",
+  html         // <-- pass HTML string, not the object
+);
     } catch (emailError) {
       console.error('Email notification failed:', emailError);
       // Continue even if email fails

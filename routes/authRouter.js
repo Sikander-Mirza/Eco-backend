@@ -1,5 +1,5 @@
 import express from "express";
-import { getCurrentUser, loginUser, logoutUser, profile, registerUser , updateProfile ,verifyOtp,getMyReferrals,updatePassword,forgotPassword, resetPassword } from "../controller/userController.js";
+import { getCurrentUser, loginUser,toggleTwoFactor,verifyLoginOtp,resendLoginOtp ,logoutUser, profile,resendVerificationOtp ,registerUser , updateProfile ,verifyOtp,getMyReferrals,updatePassword,forgotPassword, resetPassword } from "../controller/userController.js";
 import { adminMiddleware, creatorMiddleware, protect } from "../middleware/authMiddleware.js";
 import { deleteUser, getAllUsers, getAdminStats } from "../controller/adminContoller.js";
 
@@ -9,14 +9,16 @@ route.post("/register", registerUser);
 route.post("/login", loginUser);
 route.post("/logout", logoutUser); 
 route.get("/profile", protect, profile);
+route.post("/verify-login-otp", verifyLoginOtp);
 route.post("/verify-otp",verifyOtp);
 route.post("/forget-password",forgotPassword)
 route.post("/change-password",updatePassword);
 route.get("/referrals/:userId",getMyReferrals)
-route.post("/reset-password",resetPassword)
+route.post("/reset-password/:token",resetPassword)
 route.get("/me", protect, getCurrentUser); // Add this new route
-
-
+route.post("/resend-otp", resendVerificationOtp);
+route.patch("/settings/2fa", toggleTwoFactor);
+route.post("/resend-login-otp", resendLoginOtp);
 
 route.get("/admin/users", protect, adminMiddleware, getAllUsers);
 route.get("/stats",protect,adminMiddleware ,getAdminStats);

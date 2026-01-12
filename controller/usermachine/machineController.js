@@ -57,17 +57,139 @@ export const assignMachineToUser = async (req, res) => {
 
     await UserMachine.insertMany(assignments, { session });
 
-    // const emailData = {
-    //   userName: `${user.firstName} ${user.lastName}`,
-    //   machineName: machine.machineName.toString(),
-    //   quantity: quantity,
-    //   assignedDate: new Date().toLocaleDateString(),
-    //   machinePrice: machine.priceRange.toString(),
-    //   monthlyProfit: machine.monthlyProfit.toString(),
-    //   powerConsumption: machine.powerConsumption.toString()
-    // };
+   const emailData = {
+  userName: `${user.firstName || ""} ${user.lastName || ""}`.trim(),
+  machineName: machine.machineName?.toString() || "Mining Machine",
+  quantity,
+  assignedDate: new Date().toLocaleDateString(),
+  machinePrice: Number(machine.priceRange || 0).toFixed(2),
+  monthlyProfit: Number(machine.monthlyProfit || 0).toFixed(2),
+  powerConsumption: machine.powerConsumption?.toString() || "N/A",
+};
 
-    // await sendEmail(user.email, 'New Mining Machines Assigned', 'machineAssignment', emailData);
+const html = `
+  <div style="
+    margin:0;
+    padding:0;
+    background:#050810;
+    font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    color:#e5e7eb;
+  ">
+    <div style="max-width:600px;margin:0 auto;padding:24px 16px;">
+      <!-- Logo / Brand -->
+      <div style="text-align:center;margin-bottom:20px;">
+        <span style="
+          display:inline-block;
+          padding:8px 14px;
+          border-radius:999px;
+          background:rgba(34,197,94,0.08);
+          border:1px solid rgba(34,197,94,0.35);
+          color:#4ade80;
+          font-size:12px;
+          letter-spacing:0.08em;
+          text-transform:uppercase;
+        ">
+          The Eco Mining
+        </span>
+      </div>
+
+      <!-- Card -->
+      <div style="
+        background:#050816;
+        border-radius:16px;
+        border:1px solid #1f2937;
+        box-shadow:0 24px 60px rgba(0,0,0,0.75);
+        padding:24px 20px 20px;
+      ">
+        <h2 style="
+          margin:0 0 12px 0;
+          font-size:20px;
+          font-weight:700;
+          color:#4ade80;
+        ">
+          New Mining Machines Assigned
+        </h2>
+
+        <p style="margin:0 0 10px 0;font-size:14px;color:#d1d5db;">
+          Hi ${emailData.userName || "there"},
+        </p>
+        <p style="margin:0 0 18px 0;font-size:14px;color:#9ca3af;line-height:1.6;">
+          You have been assigned new mining machine(s):
+          <span style="color:#f9fafb;font-weight:600;">
+            ${emailData.machineName}
+          </span>.
+          Your mining capacity has been updated in your dashboard.
+        </p>
+
+        <!-- Details box -->
+        <div style="
+          margin:0 0 18px 0;
+          padding:14px 14px 12px;
+          border-radius:12px;
+          background:linear-gradient(135deg,#020617,#020617 40%,#064e3b33);
+          border:1px solid #111827;
+        ">
+          <p style="margin:0 0 6px 0;font-size:13px;color:#9ca3af;">
+            <span style="color:#e5e7eb;font-weight:600;">Machine:</span>
+            <span style="float:right;color:#f9fafb;font-weight:600;">
+              ${emailData.machineName}
+            </span>
+          </p>
+          <p style="margin:0 0 6px 0;font-size:13px;color:#9ca3af;clear:both;">
+            <span style="color:#e5e7eb;font-weight:600;">Quantity:</span>
+            <span style="float:right;color:#f9fafb;">
+              ${emailData.quantity}
+            </span>
+          </p>
+          <p style="margin:0 0 6px 0;font-size:13px;color:#9ca3af;clear:both;">
+            <span style="color:#e5e7eb;font-weight:600;">Assigned On:</span>
+            <span style="float:right;color:#f9fafb;">
+              ${emailData.assignedDate}
+            </span>
+          </p>
+          <p style="margin:0 0 6px 0;font-size:13px;color:#9ca3af;clear:both;">
+            <span style="color:#e5e7eb;font-weight:600;">Price per Machine:</span>
+            <span style="float:right;color:#f9fafb;">
+              $${emailData.machinePrice}
+            </span>
+          </p>
+          <p style="margin:0 0 6px 0;font-size:13px;color:#9ca3af;clear:both;">
+            <span style="color:#e5e7eb;font-weight:600;">Monthly Profit (per machine):</span>
+            <span style="float:right;color:#4ade80;font-weight:600;">
+              $${emailData.monthlyProfit}
+            </span>
+          </p>
+          <p style="margin:0;font-size:13px;color:#9ca3af;clear:both;">
+            <span style="color:#e5e7eb;font-weight:600;">Power Consumption:</span>
+            <span style="float:right;color:#f9fafb;">
+              ${emailData.powerConsumption} W
+            </span>
+          </p>
+        </div>
+
+        <p style="margin:0 0 12px 0;font-size:13px;color:#9ca3af;line-height:1.6;">
+          You can view and manage these machines in your dashboard under
+          <span style="color:#e5e7eb;font-weight:500;">My Machines</span>.
+        </p>
+
+        <p style="margin:0 0 4px 0;font-size:12px;color:#6b7280;">
+          If you did not authorize this assignment, please contact support immediately.
+        </p>
+      </div>
+
+      <!-- Footer -->
+      <p style="margin:16px 0 0 0;font-size:11px;color:#6b7280;text-align:center;">
+        © ${new Date().getFullYear()} The Eco Mining. All rights reserved.
+      </p>
+    </div>
+  </div>
+`;
+
+await sendEmail(
+  user.email,
+  "New Mining Machines Assigned",
+  html
+);
     await session.commitTransaction();
 
     const populatedAssignments = await UserMachine.find({

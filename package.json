@@ -16,6 +16,7 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "ejs": "^3.1.10",
+    "ethers": "^6.16.0",
     "express": "^4.19.2",
     "express-async-handler": "^1.2.0",
     "express-validator": "^7.1.0",
@@ -29,6 +30,7 @@
     "new-folder-(2)": "file:..",
     "node-cron": "^3.0.3",
     "nodemailer": "^6.9.15",
-    "nodemon": "^3.1.4"
+    "nodemon": "^3.1.4",
+    "tronweb": "^6.1.1"
   }
 }

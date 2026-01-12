@@ -6,8 +6,9 @@ import UserMachine from "../model/UserMAchine.js";
 import { sendEmail } from "../helper/emailServer.js";
 import Balance from "../model/Balance.js";
 import asyncHandler from "express-async-handler";
+import dotenv from 'dotenv';
 
-
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL; // e.g. "admin@yourdomain.com"
 
 export const createWithdrawalRequest = asyncHandler(async (req, res) => {
   const { amount, walletNumber, walletType, walletName } = req.body;
@@ -138,14 +139,14 @@ export const requestWithdrawal = async (req, res) => {
     }
 
     // Find user (Allow userId OR email)
- let conditions = [{ email: email.toLowerCase() }];
-if (userId) {
-  conditions.push({ _id: userId });
-}
+    let conditions = [{ email: email.toLowerCase() }];
+    if (userId) {
+      conditions.push({ _id: userId });
+    }
 
-const user = await User.findOne({
-  $or: conditions
-}).session(session);
+    const user = await User.findOne({
+      $or: conditions,
+    }).session(session);
 
     if (!user) {
       await session.abortTransaction();
@@ -157,7 +158,7 @@ const user = await User.findOne({
 
     if (!balance) {
       await session.abortTransaction();
-      return res.status(404).json({ message: "Balance record not found" });
+      return res.status(404).json({ message: "Not Enough balance" });
     }
 
     // Check balance
@@ -175,8 +176,8 @@ const user = await User.findOne({
       amount,
       type: "withdrawal",
       status: "pending",
-      walletAddress,         // ⭐ Added
-      network,               // ⭐ Added
+      walletAddress,
+      network,
       balanceBefore: balance.totalBalance,
       balanceAfter: balance.totalBalance - amount,
       details: `Withdrawal request of $${amount} via ${network}`,
@@ -185,24 +186,165 @@ const user = await User.findOne({
     await transaction.save({ session });
     await session.commitTransaction();
 
-    // Send email
-    try {
-      await sendEmail(
-        user.email,
-        "Withdrawal Request Submitted",
-        "withdrawalRequest",
-        {
-          userName: `${user.firstName} ${user.lastName}`,
-          amount,
-          requestDate: new Date().toLocaleString(),
-          transactionId: transaction._id,
-          walletAddress,
-          network,
-        }
-      );
-    } catch (emailError) {
-      console.error("Email send failed:", emailError);
-    }
+    // Send emails
+    // Send email ONLY to admin
+try {
+  if (!ADMIN_EMAIL) {
+    console.error("ADMIN_EMAIL is not set; skipping admin notification.");
+  } else {
+    const fullName = `${user.firstName || ""} ${user.lastName || ""}`.trim();
+    const requestDate = new Date().toLocaleString();
+
+   const adminHtml = `
+  <div style="
+    margin:0;
+    padding:24px;
+    background:#020617;
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    color:#e5e7eb;
+  ">
+    <div style="
+      max-width:640px;
+      margin:0 auto;
+      background:#020617;
+      border-radius:12px;
+      border:1px solid #1f2937;
+      overflow:hidden;
+      box-shadow:0 18px 45px rgba(0,0,0,0.7);
+    ">
+      <!-- Header -->
+      <div style="
+        padding:16px 24px;
+        background:linear-gradient(90deg,#22c55e,#16a34a);
+      ">
+        <h2 style="
+          margin:0;
+          font-size:20px;
+          font-weight:700;
+          color:#022c22;
+        ">
+          New Withdrawal Request
+        </h2>
+        <p style="
+          margin:4px 0 0;
+          font-size:13px;
+          color:#052e16;
+        ">
+          A user has submitted a new pending withdrawal request.
+        </p>
+      </div>
+
+      <!-- Body -->
+      <div style="padding:20px 24px 16px;">
+        <!-- User section -->
+        <h3 style="
+          margin:0 0 10px;
+          font-size:13px;
+          text-transform:uppercase;
+          letter-spacing:0.08em;
+          color:#9ca3af;
+        ">
+          User Details
+        </h3>
+        <div style="
+          border-radius:10px;
+          border:1px solid #1f2937;
+          background:#020617;
+          padding:12px 14px;
+          font-size:14px;
+        ">
+          <p style="margin:0 0 6px;">
+            <span style="font-weight:600;color:#d1d5db;">User:</span>
+            <span style="margin-left:6px;color:#e5e7eb;">
+              ${fullName || user.email}
+            </span>
+          </p>
+          <p style="margin:0;">
+            <span style="font-weight:600;color:#d1d5db;">User Email:</span>
+            <span style="margin-left:6px;color:#e5e7eb;">
+              ${user.email}
+            </span>
+          </p>
+        </div>
+
+        <!-- Request info -->
+        <h3 style="
+          margin:18px 0 10px;
+          font-size:13px;
+          text-transform:uppercase;
+          letter-spacing:0.08em;
+          color:#9ca3af;
+        ">
+          Withdrawal Details
+        </h3>
+        <div style="
+          border-radius:10px;
+          border:1px solid #1f2937;
+          background:#020617;
+          padding:12px 14px;
+          font-size:14px;
+        ">
+          <p style="margin:0 0 6px;">
+            <span style="font-weight:600;color:#d1d5db;">Amount:</span>
+            <span style="margin-left:6px;color:#22c55e;">
+              $${amount}
+            </span>
+          </p>
+          <p style="margin:0 0 6px;">
+            <span style="font-weight:600;color:#d1d5db;">Wallet Address:</span>
+            <span style="margin-left:6px;color:#e5e7eb;word-break:break-all;">
+              ${walletAddress}
+            </span>
+          </p>
+          <p style="margin:0 0 6px;">
+            <span style="font-weight:600;color:#d1d5db;">Network:</span>
+            <span style="margin-left:6px;color:#e5e7eb;">
+              ${network}
+            </span>
+          </p>
+          <p style="margin:0 0 6px;">
+            <span style="font-weight:600;color:#d1d5db;">Transaction ID:</span>
+            <span style="margin-left:6px;color:#e5e7eb;">
+              ${transaction._id}
+            </span>
+          </p>
+          <p style="margin:0;">
+            <span style="font-weight:600;color:#d1d5db;">Requested At:</span>
+            <span style="margin-left:6px;color:#e5e7eb;">
+              ${requestDate}
+            </span>
+          </p>
+        </div>
+
+        <!-- Footer note -->
+        <p style="
+          margin:18px 0 4px;
+          font-size:13px;
+          color:#9ca3af;
+        ">
+          This is an automatic notification of a new <span style="color:#22c55e;">pending withdrawal</span>.
+        </p>
+        <p style="
+          margin:0 0 4px;
+          font-size:12px;
+          color:#6b7280;
+        ">
+          Please review this request in the admin panel and approve or reject it as appropriate.
+        </p>
+      </div>
+    </div>
+  </div>
+`;
+
+    await sendEmail(
+      ADMIN_EMAIL,
+      "Withdrawal Request Submitted",
+      adminHtml   // <-- actual HTML with user details
+    );
+  }
+} catch (emailError) {
+  console.error("Email send failed:", emailError);
+}
 
     return res.status(200).json({
       message: "Withdrawal request submitted successfully",
@@ -311,23 +453,112 @@ try {
     transaction.user.lastName || ""
   }`.trim();
 
-  const html = `
-    <div style="font-family:sans-serif;line-height:1.5">
-      <h2>Withdrawal Request ${statusLabel.charAt(0).toUpperCase() + statusLabel.slice(1)}</h2>
-      <p>Hi ${fullName || "there"},</p>
-      <p>Your withdrawal request has been <b>${statusLabel}</b>.</p>
-      <p><b>Amount:</b> $${amount}</p>
-      <p><b>Transaction ID:</b> ${transaction._id}</p>
-      ${
-        adminComment
-          ? `<p><b>Note from admin:</b> ${adminComment}</p>`
-          : ""
-      }
-      <p style="margin-top:16px;color:#555">
-        If you did not request this withdrawal, please contact our support team immediately.
-      </p>
+ const html = `
+  <div style="
+    margin:0;
+    padding:24px;
+    background:#0b1120;
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    color:#e5e7eb;
+  ">
+    <div style="
+      max-width:620px;
+      margin:0 auto;
+      background:#020617;
+      border-radius:12px;
+      border:1px solid #1f2937;
+      overflow:hidden;
+      box-shadow:0 18px 45px rgba(0,0,0,0.7);
+    ">
+      <!-- Header -->
+      <div style="
+        padding:16px 24px;
+        background:linear-gradient(90deg,#22c55e,#16a34a);
+      ">
+        <h2 style="
+          margin:0;
+          font-size:20px;
+          font-weight:700;
+          color:#022c22;
+        ">
+          Withdrawal Request ${
+            statusLabel.charAt(0).toUpperCase() + statusLabel.slice(1)
+          }
+        </h2>
+        <p style="
+          margin:4px 0 0;
+          font-size:13px;
+          color:#052e16;
+        ">
+          This is an update on your recent withdrawal request.
+        </p>
+      </div>
+
+      <!-- Body -->
+      <div style="padding:20px 24px 18px;">
+        <p style="margin:0 0 10px;font-size:14px;color:#e5e7eb;">
+          Hi ${fullName || "there"},
+        </p>
+
+        <p style="margin:0 0 16px;font-size:14px;color:#e5e7eb;">
+          Your withdrawal request has been
+          <span style="font-weight:600;color:${
+            statusLabel === "approved" ? "#22c55e" : "#f97373"
+          };">
+            ${statusLabel}
+          </span>.
+        </p>
+
+        <!-- Details card -->
+        <div style="
+          border-radius:10px;
+          border:1px solid #1f2937;
+          background:#020617;
+          padding:12px 14px;
+          font-size:14px;
+        ">
+          <p style="margin:0 0 6px;">
+            <span style="font-weight:600;color:#d1d5db;">Amount:</span>
+            <span style="margin-left:6px;color:#22c55e;">
+              $${amount}
+            </span>
+          </p>
+          <p style="margin:0 0 6px;">
+            <span style="font-weight:600;color:#d1d5db;">Transaction ID:</span>
+            <span style="margin-left:6px;color:#e5e7eb;">
+              ${transaction._id}
+            </span>
+          </p>
+          ${
+            adminComment
+              ? `<p style="margin:4px 0 0;">
+                   <span style="font-weight:600;color:#d1d5db;">Note from admin:</span>
+                   <span style="margin-left:6px;color:#e5e7eb;">
+                     ${adminComment}
+                   </span>
+                 </p>`
+              : ""
+          }
+        </div>
+
+        <p style="
+          margin:18px 0 4px;
+          font-size:13px;
+          color:#9ca3af;
+        ">
+          If you did not request this withdrawal, please contact our support team immediately.
+        </p>
+        <p style="
+          margin:0;
+          font-size:12px;
+          color:#6b7280;
+        ">
+          This is an automated message, please do not reply directly to this email.
+        </p>
+      </div>
     </div>
-  `;
+  </div>
+`;
 
   await sendEmail(
     transaction.user.email,
