@@ -41,22 +41,75 @@ export const getAdminStats = async (req, res) => {
   try {
     const totalUsers = await User.countDocuments();
     const totalMachines = await MiningMachine.countDocuments();
-    const totalDeposits = await Deposit.countDocuments();
-    const totalWithdrawals = await Transaction.countDocuments();
-const contacts = await Contact.countDocuments();
+    const contacts = await Contact.countDocuments();
+
+    // Count of deposit transactions
+    const totalDeposits = await Transaction.countDocuments({
+      type: "ADMIN_ADD",
+      status: "approved" // ← only approved ones
+    });
+
+    // Count of withdrawal transactions
+    const totalWithdrawals = await Transaction.countDocuments({
+      type: "withdrawal",
+      status: "approved" // ← only approved ones
+    });
+
+    // Total deposit AMOUNT (sum)
+    const depositAmountResult = await Transaction.aggregate([
+      { 
+        $match: { 
+          type: "ADMIN_ADD", 
+          status: "approved" 
+        } 
+      },
+      { 
+        $group: { 
+          _id: null, 
+          total: { $sum: "$amount" } 
+        } 
+      }
+    ]);
+
+    // Total withdrawal AMOUNT (sum)
+    const withdrawalAmountResult = await Transaction.aggregate([
+      { 
+        $match: { 
+          type: "withdrawal", 
+          status: "approved" 
+        } 
+      },
+      { 
+        $group: { 
+          _id: null, 
+          total: { $sum: "$amount" } 
+        } 
+      }
+    ]);
+
+    const totalDepositAmount = depositAmountResult[0]?.total ?? 0;
+    const totalWithdrawalAmount = withdrawalAmountResult[0]?.total ?? 0;
+
     return res.status(200).json({
       success: true,
       stats: {
         totalUsers,
         totalMachines,
+        contacts,
+        // Counts
         totalDeposits,
-      totalWithdrawals,
-      contacts
-      }
+        totalWithdrawals,
+        // Amounts
+        totalDepositAmount,
+        totalWithdrawalAmount,
+      },
     });
 
   } catch (error) {
     console.error("Admin Stats Error:", error);
-    return res.status(500).json({ success: false, message: "Server Error" });
+    return res.status(500).json({ 
+      success: false, 
+      message: "Server Error" 
+    });
   }
 };
