@@ -1,3 +1,4 @@
+// cronJobs.js
 import cron from 'node-cron';
 import UserMachine from './model/UserMAchine.js';
 import SharePurchase from './model/SharePurchase.js';
@@ -5,300 +6,216 @@ import Balance from './model/Balance.js';
 import Transaction from './model/withdrawals.js';
 import mongoose from 'mongoose';
 
-export const setupAutoProfitUpdates = () => {
-  // ✅ Runs every day at 00:00 (midnight)
-  // Checks all machines/shares and pays if >= 30 days since last payout
-  cron.schedule('0 0 * * *', async () => {
-    const now = new Date();
-    console.log(`\n[CRON] ${now.toISOString()} - Starting profit update job`);
+// ✅ Extract the logic into a reusable function
+export const runProfitUpdate = async () => {
+  const now = new Date();
+  console.log(`\n[PROFIT JOB] ${now.toISOString()} - Starting`);
 
+  let normalProcessed = 0;
+  let normalSkipped = 0;
+  let sharesProcessed = 0;
+  let sharesSkipped = 0;
+  let totalPaidOut = 0;
+  const errors = [];
+
+  // ============ NORMAL MACHINES ============
+  const userMachines = await UserMachine.find({ status: 'active' })
+    .populate('machine')
+    .populate('user');
+
+  console.log(`[PROFIT JOB] Found ${userMachines.length} active normal machines`);
+
+  for (const machine of userMachines) {
+    // Process each machine in its OWN transaction
     const session = await mongoose.startSession();
-
-    let normalProcessed = 0;
-    let normalSkipped = 0;
-    let sharesProcessed = 0;
-    let sharesSkipped = 0;
-    let totalPaidOut = 0;
-
     try {
       await session.withTransaction(async () => {
+        if (!machine.user?._id) return;
+        if (!machine.machine?.monthlyProfit) return;
 
-        // ============================================================
-        // ================= NORMAL MACHINES ==========================
-        // ============================================================
-        console.log('\n[CRON] === Processing normal machines ===');
-        
-        const userMachines = await UserMachine.find({ status: 'active' })
-          .populate('machine')
-          .populate('user')
-          .session(session);
+        const lastUpdate = machine.lastProfitUpdate || machine.assignedDate;
+        const currentDate = new Date();
+        const lastUpdateTime = new Date(lastUpdate).getTime();
 
-        console.log(`[CRON] Found ${userMachines.length} active normal machines`);
+        if (lastUpdateTime > currentDate.getTime()) {
+          console.warn(`[PROFIT JOB] ⚠️ Future date for machine ${machine._id}`);
+          normalSkipped++;
+          return;
+        }
 
-        for (const machine of userMachines) {
-          // Skip if data is broken
-          if (!machine.user || !machine.user._id) {
-            console.warn(`[CRON] ⚠️ Skip machine ${machine._id} - no user`);
-            continue;
-          }
-          if (!machine.machine || !machine.machine.monthlyProfit) {
-            console.warn(`[CRON] ⚠️ Skip machine ${machine._id} - no machine data`);
-            continue;
-          }
+        const daysSinceUpdate = Math.floor(
+          (currentDate.getTime() - lastUpdateTime) / (1000 * 60 * 60 * 24)
+        );
+        const monthsDue = Math.floor(daysSinceUpdate / 30);
 
-          const lastUpdate = machine.lastProfitUpdate || machine.assignedDate;
-          const currentDate = new Date();
+        if (monthsDue < 1) {
+          normalSkipped++;
+          console.log(`[PROFIT JOB] ⏭️ Skip machine ${machine._id} - ${daysSinceUpdate} days`);
+          return;
+        }
 
-          // Days since last profit payout (or since machine was assigned)
-          const daysSinceUpdate = Math.floor(
-            (currentDate.getTime() - new Date(lastUpdate).getTime()) /
-              (1000 * 60 * 60 * 24)
-          );
+        const monthlyProfit = machine.machine.monthlyProfit;
+        const profitToAdd = Number((monthlyProfit * monthsDue).toFixed(4));
 
-          // ✅ How many FULL months are due (supports backfill)
-          const monthsDue = Math.floor(daysSinceUpdate / 30);
+        machine.monthlyProfitAccumulated += profitToAdd;
+        machine.lastProfitUpdate = new Date(
+          lastUpdateTime + monthsDue * 30 * 24 * 60 * 60 * 1000
+        );
+        await machine.save({ session });
 
-          if (monthsDue < 1) {
-            normalSkipped++;
-            console.log(
-              `[CRON] ⏭️  Skip machine ${machine._id} - only ${daysSinceUpdate} day(s) since last update`
-            );
-            continue;
-          }
-
-          // ✅ Calculate total profit for all missed months
-          const monthlyProfit = machine.machine.monthlyProfit;
-          const profitToAdd = Number((monthlyProfit * monthsDue).toFixed(4));
-
-          // ---------- UPDATE MACHINE ----------
-          machine.monthlyProfitAccumulated += profitToAdd;
-          // Move lastProfitUpdate forward by exactly (monthsDue × 30 days)
-          machine.lastProfitUpdate = new Date(
-            new Date(lastUpdate).getTime() + monthsDue * 30 * 24 * 60 * 60 * 1000
-          );
-          await machine.save({ session });
-
-          // ---------- UPDATE USER BALANCE ----------
-          let userBalance = await Balance.findOne({
+        let userBalance = await Balance.findOne({ user: machine.user._id }).session(session);
+        if (!userBalance) {
+          userBalance = new Balance({
             user: machine.user._id,
-          }).session(session);
-
-          if (!userBalance) {
-            userBalance = new Balance({
-              user: machine.user._id,
-              miningBalance: 0,
-              adminAdd: 0,
-              totalBalance: 0,
-            });
-          }
-
-          const oldTotal = userBalance.totalBalance || 0;
-
-          userBalance.miningBalance = Number(
-            (userBalance.miningBalance + profitToAdd).toFixed(4)
-          );
-          userBalance.totalBalance = Number(
-            (userBalance.adminAdd + userBalance.miningBalance).toFixed(4)
-          );
-          userBalance.lastUpdated = currentDate;
-          await userBalance.save({ session });
-
-          // ---------- CREATE TRANSACTION RECORD ----------
-          await Transaction.create(
-            [
-              {
-                user: machine.user._id,
-                amount: profitToAdd,
-                type: 'profit',
-                status: 'completed',
-                balanceBefore: oldTotal,
-                balanceAfter: userBalance.totalBalance,
-                details:
-                  monthsDue === 1
-                    ? `Monthly profit from ${machine.machine.machineName}`
-                    : `${monthsDue} months of profit from ${machine.machine.machineName} (auto-backfill)`,
-                transactionDate: currentDate,
-                metadata: {
-                  userMachineId: machine._id,
-                  machineId: machine.machine._id,
-                  machineName: machine.machine.machineName,
-                  monthlyProfit: monthlyProfit,
-                  monthsPaid: monthsDue,
-                  daysSinceLastUpdate: daysSinceUpdate,
-                  isBackfill: monthsDue > 1,
-                },
-              },
-            ],
-            { session }
-          );
-
-          normalProcessed++;
-          totalPaidOut += profitToAdd;
-
-          const u = machine.user;
-          const fullName = `${u.firstName || ''} ${u.lastName || ''}`.trim();
-
-          console.log(`[CRON] ✅ Normal machine profit paid:`, {
-            user: fullName || u.email || u._id?.toString(),
-            machine: machine.machine.machineName,
-            daysSinceLast: daysSinceUpdate,
-            monthsPaid: monthsDue,
-            monthlyRate: `$${monthlyProfit}`,
-            totalPaid: `$${profitToAdd}`,
-            newBalance: `$${userBalance.totalBalance}`,
-            backfill: monthsDue > 1 ? '⚠️ YES' : 'no',
+            miningBalance: 0,
+            adminAdd: 0,
+            totalBalance: 0,
           });
         }
 
-        // ============================================================
-        // ================= SHARE MACHINES ===========================
-        // ============================================================
-        console.log('\n[CRON] === Processing share machines ===');
-        
-        const activeShares = await SharePurchase.find({ status: 'active' })
-          .populate('machine')
-          .populate('user')
-          .session(session);
+        const oldTotal = userBalance.totalBalance || 0;
+        userBalance.miningBalance = Number((userBalance.miningBalance + profitToAdd).toFixed(4));
+        userBalance.totalBalance = Number((userBalance.adminAdd + userBalance.miningBalance).toFixed(4));
+        userBalance.lastUpdated = currentDate;
+        await userBalance.save({ session });
 
-        console.log(`[CRON] Found ${activeShares.length} active shares`);
-
-        for (const share of activeShares) {
-          // Skip if data is broken
-          if (!share.user || !share.user._id) {
-            console.warn(`[CRON] ⚠️ Skip share ${share._id} - no user`);
-            continue;
-          }
-          if (!share.machine || !share.profitPerShare) {
-            console.warn(`[CRON] ⚠️ Skip share ${share._id} - no machine/profit data`);
-            continue;
-          }
-
-          const lastUpdate = share.lastProfitUpdate || share.purchaseDate;
-          const currentDate = new Date();
-
-          const daysSinceUpdate = Math.floor(
-            (currentDate.getTime() - new Date(lastUpdate).getTime()) /
-              (1000 * 60 * 60 * 24)
-          );
-
-          const monthsDue = Math.floor(daysSinceUpdate / 30);
-
-          if (monthsDue < 1) {
-            sharesSkipped++;
-            console.log(
-              `[CRON] ⏭️  Skip share ${share._id} - only ${daysSinceUpdate} day(s) since last update`
-            );
-            continue;
-          }
-
-          // ✅ Calculate profit: profitPerShare × numberOfShares × monthsDue
-          const monthlyProfit = Number(
-            (share.profitPerShare * share.numberOfShares).toFixed(4)
-          );
-          const profitToAdd = Number(
-            (monthlyProfit * monthsDue).toFixed(4)
-          );
-
-          // ---------- UPDATE SHARE ----------
-          share.totalProfitEarned = Number(
-            (share.totalProfitEarned + profitToAdd).toFixed(4)
-          );
-          share.lastProfitUpdate = new Date(
-            new Date(lastUpdate).getTime() + monthsDue * 30 * 24 * 60 * 60 * 1000
-          );
-          await share.save({ session });
-
-          // ---------- UPDATE USER BALANCE ----------
-          let userBalance = await Balance.findOne({
-            user: share.user._id,
-          }).session(session);
-
-          if (!userBalance) {
-            userBalance = new Balance({
-              user: share.user._id,
-              miningBalance: 0,
-              adminAdd: 0,
-              totalBalance: 0,
-            });
-          }
-
-          const oldTotal = userBalance.totalBalance || 0;
-
-          userBalance.miningBalance = Number(
-            (userBalance.miningBalance + profitToAdd).toFixed(4)
-          );
-          userBalance.totalBalance = Number(
-            (userBalance.adminAdd + userBalance.miningBalance).toFixed(4)
-          );
-          userBalance.lastUpdated = currentDate;
-          await userBalance.save({ session });
-
-          // ---------- CREATE TRANSACTION RECORD ----------
-          await Transaction.create(
-            [
-              {
-                user: share.user._id,
-                amount: profitToAdd,
-                type: 'SHARE_PROFIT',
-                status: 'completed',
-                balanceBefore: oldTotal,
-                balanceAfter: userBalance.totalBalance,
-                details:
-                  monthsDue === 1
-                    ? `Monthly profit for ${share.numberOfShares} shares of ${share.machine.machineName}`
-                    : `${monthsDue} months of profit for ${share.numberOfShares} shares of ${share.machine.machineName} (auto-backfill)`,
-                transactionDate: currentDate,
-                metadata: {
-                  shareId: share._id,
-                  machineId: share.machine._id,
-                  machineName: share.machine.machineName,
-                  numberOfShares: share.numberOfShares,
-                  profitPerShare: share.profitPerShare,
-                  monthlyProfit: monthlyProfit,
-                  monthsPaid: monthsDue,
-                  daysSinceLastUpdate: daysSinceUpdate,
-                  isBackfill: monthsDue > 1,
-                },
-              },
-            ],
-            { session }
-          );
-
-          sharesProcessed++;
-          totalPaidOut += profitToAdd;
-
-          const u = share.user;
-          const fullName = `${u.firstName || ''} ${u.lastName || ''}`.trim();
-
-          console.log(`[CRON] ✅ Share profit paid:`, {
-            user: fullName || u.email || u._id?.toString(),
-            machine: share.machine.machineName,
-            shares: share.numberOfShares,
-            daysSinceLast: daysSinceUpdate,
+        await Transaction.create([{
+          user: machine.user._id,
+          amount: profitToAdd,
+          type: 'profit',
+          status: 'completed',
+          balanceBefore: oldTotal,
+          balanceAfter: userBalance.totalBalance,
+          details: monthsDue === 1
+            ? `Monthly profit from ${machine.machine.machineName}`
+            : `${monthsDue} months of profit from ${machine.machine.machineName} (backfill)`,
+          transactionDate: currentDate,
+          metadata: {
+            userMachineId: machine._id,
+            machineId: machine.machine._id,
             monthsPaid: monthsDue,
-            monthlyRate: `$${monthlyProfit}`,
-            totalPaid: `$${profitToAdd}`,
-            totalEarned: `$${share.totalProfitEarned}`,
-            newBalance: `$${userBalance.totalBalance}`,
-            backfill: monthsDue > 1 ? '⚠️ YES' : 'no',
-          });
-        }
+          },
+        }], { session });
+
+        normalProcessed++;
+        totalPaidOut += profitToAdd;
+        console.log(`[PROFIT JOB] ✅ Paid $${profitToAdd} to ${machine.user.email}`);
       });
-
-      // ============ SUMMARY LOG ============
-      console.log(`\n[CRON] ====== SUMMARY ======`);
-      console.log(`[CRON] Normal Machines: ${normalProcessed} paid, ${normalSkipped} skipped`);
-      console.log(`[CRON] Share Machines:  ${sharesProcessed} paid, ${sharesSkipped} skipped`);
-      console.log(`[CRON] Total Paid Out:  $${totalPaidOut.toFixed(2)}`);
-      console.log(`[CRON] Finished at:     ${new Date().toISOString()}\n`);
-
-    } catch (error) {
-      console.error('[CRON] ❌ Profit update failed:', error);
-      console.error('[CRON] Stack:', error.stack);
+    } catch (err) {
+      console.error(`[PROFIT JOB] ❌ Machine ${machine._id} failed:`, err.message);
+      errors.push({ machineId: machine._id, error: err.message });
     } finally {
       session.endSession();
     }
-  });
+  }
 
-  console.log('✅ [CRON] Profit update job scheduled - runs daily at 00:00');
+  // ============ SHARE MACHINES ============
+  const activeShares = await SharePurchase.find({ status: 'active' })
+    .populate('machine')
+    .populate('user');
+
+  console.log(`[PROFIT JOB] Found ${activeShares.length} active shares`);
+
+  for (const share of activeShares) {
+    const session = await mongoose.startSession();
+    try {
+      await session.withTransaction(async () => {
+        if (!share.user?._id) return;
+        if (!share.machine || !share.profitPerShare) return;
+
+        const lastUpdate = share.lastProfitUpdate || share.purchaseDate;
+        const currentDate = new Date();
+        const lastUpdateTime = new Date(lastUpdate).getTime();
+
+        if (lastUpdateTime > currentDate.getTime()) {
+          console.warn(`[PROFIT JOB] ⚠️ Future date for share ${share._id}`);
+          sharesSkipped++;
+          return;
+        }
+
+        const daysSinceUpdate = Math.floor(
+          (currentDate.getTime() - lastUpdateTime) / (1000 * 60 * 60 * 24)
+        );
+        const monthsDue = Math.floor(daysSinceUpdate / 30);
+
+        if (monthsDue < 1) {
+          sharesSkipped++;
+          console.log(`[PROFIT JOB] ⏭️ Skip share ${share._id} - ${daysSinceUpdate} days`);
+          return;
+        }
+
+        const monthlyProfit = Number((share.profitPerShare * share.numberOfShares).toFixed(4));
+        const profitToAdd = Number((monthlyProfit * monthsDue).toFixed(4));
+
+        share.totalProfitEarned = Number((share.totalProfitEarned + profitToAdd).toFixed(4));
+        share.lastProfitUpdate = new Date(lastUpdateTime + monthsDue * 30 * 24 * 60 * 60 * 1000);
+        await share.save({ session });
+
+        let userBalance = await Balance.findOne({ user: share.user._id }).session(session);
+        if (!userBalance) {
+          userBalance = new Balance({
+            user: share.user._id,
+            miningBalance: 0,
+            adminAdd: 0,
+            totalBalance: 0,
+          });
+        }
+
+        const oldTotal = userBalance.totalBalance || 0;
+        userBalance.miningBalance = Number((userBalance.miningBalance + profitToAdd).toFixed(4));
+        userBalance.totalBalance = Number((userBalance.adminAdd + userBalance.miningBalance).toFixed(4));
+        userBalance.lastUpdated = currentDate;
+        await userBalance.save({ session });
+
+        await Transaction.create([{
+          user: share.user._id,
+          amount: profitToAdd,
+          type: 'SHARE_PROFIT',
+          status: 'completed',
+          balanceBefore: oldTotal,
+          balanceAfter: userBalance.totalBalance,
+          details: `${monthsDue} month(s) profit for ${share.numberOfShares} shares of ${share.machine.machineName}`,
+          transactionDate: currentDate,
+          metadata: {
+            shareId: share._id,
+            monthsPaid: monthsDue,
+          },
+        }], { session });
+
+        sharesProcessed++;
+        totalPaidOut += profitToAdd;
+        console.log(`[PROFIT JOB] ✅ Share $${profitToAdd} to ${share.user.email}`);
+      });
+    } catch (err) {
+      console.error(`[PROFIT JOB] ❌ Share ${share._id} failed:`, err.message);
+      errors.push({ shareId: share._id, error: err.message });
+    } finally {
+      session.endSession();
+    }
+  }
+
+  const summary = {
+    normalProcessed,
+    normalSkipped,
+    sharesProcessed,
+    sharesSkipped,
+    totalPaidOut: Number(totalPaidOut.toFixed(2)),
+    errors,
+    finishedAt: new Date().toISOString(),
+  };
+
+  console.log(`[PROFIT JOB] ====== SUMMARY ======`, summary);
+  return summary;
+};
+
+// ✅ Only use node-cron if NOT on serverless
+export const setupAutoProfitUpdates = () => {
+  cron.schedule('0 0 * * *', async () => {
+    try {
+      await runProfitUpdate();
+    } catch (err) {
+      console.error('[CRON] Failed:', err);
+    }
+  });
+  console.log('✅ [CRON] Scheduled - runs daily at 00:00');
 };

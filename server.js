@@ -112,5 +112,27 @@ const server = async () => {
   res.send("✅ Backend deployed on Vercel and running!");
 });
 };
-
+// In your backend, add a temp route:
+app.get('/debug-shares', async (req, res) => {
+  const shares = await SharePurchase.find({ status: 'active' }).populate('machine user');
+  const now = new Date();
+  
+  const debug = shares.map(s => {
+    const lastUpdate = s.lastProfitUpdate || s.purchaseDate;
+    const days = Math.floor((now - new Date(lastUpdate)) / (1000*60*60*24));
+    return {
+      shareId: s._id,
+      user: s.user?.email,
+      machine: s.machine?.machineName,
+      purchaseDate: s.purchaseDate,
+      lastProfitUpdate: s.lastProfitUpdate,
+      effectiveLastUpdate: lastUpdate,
+      daysSinceUpdate: days,
+      monthsDue: Math.floor(days / 30),
+      wouldBePaid: Math.floor(days / 30) >= 1,
+    };
+  });
+  
+  res.json(debug);
+});
 server();
