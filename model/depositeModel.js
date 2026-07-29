@@ -15,17 +15,44 @@ const depositSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
-    accounttype:{
-      type:String,
-      required:true,
+    accounttype: {
+      type: String,
+      required: true,
     },
     attachment: {
-      type: [String], // storing array of uploaded Cloudinary URLs
+      type: [String],
       required: false,
     },
     dateTime: {
       type: Date,
       default: Date.now,
+    },
+    paymentProvider: {
+      type: String,
+      enum: ["manual", "nowpayments"],
+      default: "manual",
+    },
+    paymentStatus: {
+      type: String,
+      default: "pending",
+    },
+    payCurrency: {
+      type: String,
+    },
+    actuallyPaid: {
+      type: Number,
+    },
+    nowPaymentsInvoiceId: {
+      type: String,
+    },
+    nowPaymentsPaymentId: {
+      type: String,
+    },
+    invoiceUrl: {
+      type: String,
+    },
+    nowPaymentsRaw: {
+      type: mongoose.Schema.Types.Mixed,
     },
   },
   { timestamps: true }
